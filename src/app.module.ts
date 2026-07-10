@@ -8,12 +8,16 @@ import { TableModule } from './modules/table/table.module';
 import { MenuModule } from './modules/menu/menu.module';
 import { OrderModule } from './modules/order/order.module';
 import { KitchenModule } from './modules/kitchen/kitchen.module';
-import { PaymentModule } from './modules/payment/payment.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
     DatabaseModule,
     RedisModule,
     RabbitMQModule,
@@ -21,12 +25,11 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     MenuModule,
     OrderModule,
     KitchenModule,
-    PaymentModule,
     InventoryModule,
     AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
 
