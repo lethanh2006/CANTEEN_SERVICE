@@ -1,0 +1,91 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import mongoose, { Document, Types } from 'mongoose';
+
+export type OrderDocument = Order & Document;
+
+@Schema({ _id: false })
+export class SelectedOption {
+  @Prop({ required: true })
+  name: string;
+
+  @Prop({ required: true, default: 0 })
+  price: number;
+}
+
+const SelectedOptionSchema = SchemaFactory.createForClass(SelectedOption);
+
+@Schema({ _id: false })
+export class OrderItem {
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'MenuItem', required: true })
+  menuItemId: Types.ObjectId;
+
+  @Prop({ required: true })
+  name: string;
+
+  @Prop({ required: true, min: 1, default: 1 })
+  quantity: number;
+
+  @Prop({ required: true, min: 0 })
+  unitPrice: number;
+
+  @Prop({ type: [SelectedOptionSchema], default: [] })
+  selectedOptions: SelectedOption[];
+
+  @Prop({ required: false })
+  note: string;
+}
+
+const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
+
+@Schema({ timestamps: true })
+export class Order {
+  @Prop({ required: true, unique: true })
+  orderNumber: string;
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId, required: true })
+  userId: Types.ObjectId;
+
+  @Prop({ required: true, default: 'user' }) // 'user' | 'manager' | 'vip'
+  userRole: string;
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Table', required: false, default: null })
+  tableId: Types.ObjectId | null;
+
+  @Prop({ type: [OrderItemSchema], required: true })
+  items: OrderItem[];
+
+  @Prop({ required: true, min: 0 })
+  totalAmount: number;
+
+  @Prop({ required: true, default: 0, min: 0 })
+  discountAmount: number;
+
+  @Prop({ required: true, min: 0 })
+  finalAmount: number;
+
+  @Prop({
+    required: true,
+    enum: ['CREATED', 'CONFIRMED', 'COOKING', 'READY', 'COMPLETED', 'PAID', 'CANCELLED'],
+    default: 'CREATED',
+  })
+  status: string;
+
+  @Prop({ required: true, default: 0 })
+  priorityScore: number;
+
+  @Prop({
+    required: true,
+    enum: ['PENDING', 'PAID', 'REFUNDED'],
+    default: 'PENDING',
+  })
+  paymentStatus: string;
+
+  @Prop({
+    required: true,
+    enum: ['CASH', 'VNPAY', 'MOMO', 'VIETQR'],
+    default: 'CASH',
+  })
+  paymentMethod: string;
+}
+
+export const OrderSchema = SchemaFactory.createForClass(Order);
