@@ -1,3 +1,6 @@
+import dns from 'dns';
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
