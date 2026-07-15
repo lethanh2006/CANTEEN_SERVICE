@@ -4,6 +4,7 @@ import { Category, CategorySchema } from '../../schemas/categories.schema';
 import { MenuItem, MenuItemSchema } from '../../schemas/menu_items.schema';
 import { MenuController } from './menu.controller';
 import { MenuService } from './menu.service';
+import { MenuHistoryManager } from './utils/undo-stack';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { MenuService } from './menu.service';
     ]),
   ],
   controllers: [MenuController],
-  providers: [MenuService],
-  exports: [MenuService],
+  providers: [MenuService, MenuHistoryManager],
+  exports: [MenuService, MenuHistoryManager],
 })
 export class MenuModule {}
