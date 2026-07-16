@@ -135,6 +135,33 @@ export class MenuService {
   }
 
   /**
+   * Xóa món ăn khỏi menu (Hard delete khỏi DB, lưu trạng thái cũ vào Stack)
+   */
+  async deleteMenuItem(id: string, userId = 'system'): Promise<MenuItem> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('ID món ăn không đúng định dạng ObjectId');
+    }
+
+    const menuItem = await this.menuItemModel.findById(id).exec();
+    if (!menuItem) {
+      throw new NotFoundException(`Món ăn với ID '${id}' không tồn tại`);
+    }
+
+    const previousData = menuItem.toObject();
+
+    await this.menuItemModel.findByIdAndDelete(id).exec();
+
+    await this.menuHistoryManager.pushCommand(userId, {
+      type: 'DELETE',
+      menuItemId: id,
+      previousData,
+      newData: null,
+    });
+
+    return menuItem;
+  }
+
+  /**
    * Hoàn tác (Undo) thao tác sửa đổi vừa thực hiện trên Menu
    */
   async undoMenuItemChange(userId = 'system'): Promise<any> {

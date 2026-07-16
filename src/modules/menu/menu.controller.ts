@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { MenuService } from './menu.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
@@ -50,6 +50,21 @@ export class MenuController {
   ) {
     const userId = user?._id || user?.id || 'system';
     return this.menuService.updateMenuItem(id, updateMenuItemDto, userId);
+  }
+
+  /**
+   * DELETE /api/canteen/admin/menu/:id
+   * Xóa món ăn khỏi menu (Soft delete)
+   * Quyền hạn: Admin / Manager
+   */
+  @Delete('admin/menu/:id')
+  @Roles('admin', 'manager')
+  async deleteMenuItem(
+    @Param('id') id: string,
+    @User() user: any,
+  ) {
+    const userId = user?._id || user?.id || 'system';
+    return this.menuService.deleteMenuItem(id, userId);
   }
 
   /**

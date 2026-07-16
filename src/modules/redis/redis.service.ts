@@ -13,13 +13,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const redisUrl = this.configService.get<string>('REDIS_URL') || 'redis://127.0.0.1:6379';
     this.client = createClient({
       url: redisUrl,
+      RESP: 2,
       socket: {
         reconnectStrategy: (retries) => {
           this.logger.warn(`Redis reconnect attempt: ${retries}`);
           return Math.min(retries * 100, 3000);
         },
       },
-    }) as RedisClientType;
+    }) as unknown as RedisClientType;
 
     this.client.on('connect', () => this.logger.log('Redis connecting...'));
     this.client.on('ready', () => this.logger.log('Connected to Redis successfully'));

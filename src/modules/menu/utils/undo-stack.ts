@@ -13,7 +13,7 @@ export class MenuHistoryManager {
   private readonly MAX_HISTORY_LIMIT = 50;
   private readonly TTL_SECONDS = 86400; // 24 hours
 
-  constructor(private readonly redisService: RedisService) {}
+  constructor(private readonly redisService: RedisService) { }
 
   private getUndoKey(userId: string): string {
     return `canteen:undo:${userId}`;
@@ -28,16 +28,12 @@ export class MenuHistoryManager {
     const redoKey = this.getRedoKey(userId);
     const commandStr = JSON.stringify(command);
 
-    // Push new command to undo stack in Redis
     await this.redisService.rPush(undoKey, commandStr);
-    
-    // Keep only the last 50 commands
+
     await this.redisService.lTrim(undoKey, -this.MAX_HISTORY_LIMIT, -1);
-    
-    // Set 24h expiration on the undo list
+
     await this.redisService.expire(undoKey, this.TTL_SECONDS);
 
-    // Clear redo stack for this user since history became linear
     await this.redisService.del(redoKey);
   }
 
@@ -45,7 +41,6 @@ export class MenuHistoryManager {
     const undoKey = this.getUndoKey(userId);
     const redoKey = this.getRedoKey(userId);
 
-    // Retrieve last command from undo stack
     const commandStr = await this.redisService.rPop(undoKey);
     if (!commandStr) {
       return null;
@@ -53,7 +48,6 @@ export class MenuHistoryManager {
 
     const command = JSON.parse(commandStr) as MenuCommand;
 
-    // Push to redo stack
     await this.redisService.rPush(redoKey, commandStr);
     await this.redisService.expire(redoKey, this.TTL_SECONDS);
 
@@ -64,7 +58,6 @@ export class MenuHistoryManager {
     const undoKey = this.getUndoKey(userId);
     const redoKey = this.getRedoKey(userId);
 
-    // Retrieve last command from redo stack
     const commandStr = await this.redisService.rPop(redoKey);
     if (!commandStr) {
       return null;
@@ -72,7 +65,6 @@ export class MenuHistoryManager {
 
     const command = JSON.parse(commandStr) as MenuCommand;
 
-    // Push back to undo stack
     await this.redisService.rPush(undoKey, commandStr);
     await this.redisService.expire(undoKey, this.TTL_SECONDS);
 
