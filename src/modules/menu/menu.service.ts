@@ -42,7 +42,7 @@ export class MenuService {
   /**
    * Tạo mới một món ăn
    */
-  async createMenuItem(dto: CreateMenuItemDto): Promise<MenuItem> {
+  async createMenuItem(dto: CreateMenuItemDto, userId = 'system'): Promise<MenuItem> {
     if (!Types.ObjectId.isValid(dto.categoryId)) {
       throw new BadRequestException('ID danh mục (categoryId) không đúng định dạng ObjectId');
     }
@@ -67,7 +67,7 @@ export class MenuService {
 
     const savedItem = await createdMenuItem.save();
 
-    this.menuHistoryManager.pushCommand({
+    await this.menuHistoryManager.pushCommand(userId, {
       type: 'CREATE',
       menuItemId: savedItem._id.toString(),
       previousData: null,
@@ -80,7 +80,7 @@ export class MenuService {
   /**
    * Cập nhật thông tin món ăn (Lưu trạng thái cũ vào Stack)
    */
-  async updateMenuItem(id: string, dto: UpdateMenuItemDto): Promise<MenuItem> {
+  async updateMenuItem(id: string, dto: UpdateMenuItemDto, userId = 'system'): Promise<MenuItem> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('ID món ăn không đúng định dạng ObjectId');
     }
@@ -124,7 +124,7 @@ export class MenuService {
 
     const newData = updatedMenuItem.toObject();
 
-    this.menuHistoryManager.pushCommand({
+    await this.menuHistoryManager.pushCommand(userId, {
       type: 'UPDATE',
       menuItemId: id,
       previousData,
@@ -137,8 +137,8 @@ export class MenuService {
   /**
    * Hoàn tác (Undo) thao tác sửa đổi vừa thực hiện trên Menu
    */
-  async undoMenuItemChange(): Promise<any> {
-    const command = this.menuHistoryManager.popUndo();
+  async undoMenuItemChange(userId = 'system'): Promise<any> {
+    const command = await this.menuHistoryManager.popUndo(userId);
     if (!command) {
       throw new BadRequestException('Không có thao tác nào để hoàn tác (Undo Stack rỗng)');
     }
@@ -175,8 +175,8 @@ export class MenuService {
   /**
    * Làm lại (Redo) thao tác vừa hoàn tác trên Menu
    */
-  async redoMenuItemChange(): Promise<any> {
-    const command = this.menuHistoryManager.popRedo();
+  async redoMenuItemChange(userId = 'system'): Promise<any> {
+    const command = await this.menuHistoryManager.popRedo(userId);
     if (!command) {
       throw new BadRequestException('Không có thao tác nào để làm lại (Redo Stack rỗng)');
     }

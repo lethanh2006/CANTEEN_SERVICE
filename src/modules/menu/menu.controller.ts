@@ -4,6 +4,7 @@ import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
+import { User } from './decorators/user.decorator';
 
 @Controller('api/canteen')
 @UseGuards(RolesGuard)
@@ -27,8 +28,12 @@ export class MenuController {
    */
   @Post('admin/menu')
   @Roles('admin', 'manager')
-  async createMenuItem(@Body() createMenuItemDto: CreateMenuItemDto) {
-    return this.menuService.createMenuItem(createMenuItemDto);
+  async createMenuItem(
+    @Body() createMenuItemDto: CreateMenuItemDto,
+    @User() user: any,
+  ) {
+    const userId = user?._id || user?.id || 'system';
+    return this.menuService.createMenuItem(createMenuItemDto, userId);
   }
 
   /**
@@ -41,8 +46,10 @@ export class MenuController {
   async updateMenuItem(
     @Param('id') id: string,
     @Body() updateMenuItemDto: UpdateMenuItemDto,
+    @User() user: any,
   ) {
-    return this.menuService.updateMenuItem(id, updateMenuItemDto);
+    const userId = user?._id || user?.id || 'system';
+    return this.menuService.updateMenuItem(id, updateMenuItemDto, userId);
   }
 
   /**
@@ -52,8 +59,9 @@ export class MenuController {
    */
   @Post('admin/menu/undo')
   @Roles('admin', 'manager')
-  async undoMenuItemChange() {
-    return this.menuService.undoMenuItemChange();
+  async undoMenuItemChange(@User() user: any) {
+    const userId = user?._id || user?.id || 'system';
+    return this.menuService.undoMenuItemChange(userId);
   }
 
   /**
@@ -63,7 +71,8 @@ export class MenuController {
    */
   @Post('admin/menu/redo')
   @Roles('admin', 'manager')
-  async redoMenuItemChange() {
-    return this.menuService.redoMenuItemChange();
+  async redoMenuItemChange(@User() user: any) {
+    const userId = user?._id || user?.id || 'system';
+    return this.menuService.redoMenuItemChange(userId);
   }
 }
