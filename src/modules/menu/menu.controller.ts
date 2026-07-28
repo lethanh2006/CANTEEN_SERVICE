@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { MenuService } from './menu.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
@@ -10,7 +10,7 @@ import { Role } from '../../common/enums/role.enum';
 @Controller('api/canteen')
 @UseGuards(RolesGuard)
 export class MenuController {
-  constructor(private readonly menuService: MenuService) { }
+  constructor(private readonly menuService: MenuService) {}
 
   /**
    * GET /api/canteen/menu
@@ -20,6 +20,16 @@ export class MenuController {
   @Get('menu')
   async getMenu() {
     return this.menuService.getMenu();
+  }
+
+  /**
+   * GET /api/canteen/menu/search?q=...
+   * Tìm kiếm món ăn real-time bằng Trie Prefix Tree
+   * Quyền hạn: Tất cả (Public)
+   */
+  @Get('menu/search')
+  async searchMenu(@Query('q') query: string) {
+    return this.menuService.searchMenuItems(query || '');
   }
 
   /**

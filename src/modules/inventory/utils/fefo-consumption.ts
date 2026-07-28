@@ -1,0 +1,72 @@
+import { InventoryBatchNode, InventoryMinHeap } from './min-heap';
+
+export interface BatchConsumptionResult {
+  batchId: string;
+  expiryDate: Date;
+  consumedQuantity: number;
+  remainingBatchQuantity: number;
+  status: 'ACTIVE' | 'DEPLETED';
+}
+
+export interface InventoryDeductionReport {
+  ingredientId: string;
+  requestedQuantity: number;
+  totalConsumed: number;
+  isFullyFulfilled: boolean;
+  affectedBatches: BatchConsumptionResult[];
+  remainingTotalStock: number;
+  isLowStockAlert: boolean;
+}
+
+/**
+ * FEFOConsumptionService
+ * First Expired First Out (FEFO) batch consumption calculation using Min Heap
+ */
+export class FEFOConsumptionService {
+  /**
+   * Consume raw ingredient quantity from active inventory batches based on earliest expiry date
+   */
+  static consumeIngredientBatches(
+    ingredientId: string,
+    requiredAmount: number,
+    minHeap: InventoryMinHeap,
+    minimumThreshold: number
+  ): InventoryDeductionReport {
+    let remainingNeeded = requiredAmount;
+    const affectedBatches: BatchConsumptionResult[] = [];
+
+    const sortedBatches = minHeap.getSortedBatches();
+    const totalStockBefore = sortedBatches.reduce((acc, b) => acc + b.quantity, 0);
+
+    for (const batch of sortedBatches) {
+      if (remainingNeeded <= 0) break;
+
+      const deductAmount = Math.min(batch.quantity, remainingNeeded);
+      batch.quantity -= deductAmount;
+      remainingNeeded -= deductAmount;
+
+      const newStatus = batch.quantity === 0 ? 'DEPLETED' : 'ACTIVE';
+
+      affectedBatches.push({
+        batchId: batch.batchId,
+        expiryDate: batch.expiryDate,
+        consumedQuantity: deductAmount,
+        remainingBatchQuantity: batch.quantity,
+        status: newStatus,
+      });
+    }
+
+    const totalConsumed = requiredAmount - remainingNeeded;
+    const remainingTotalStock = Math.max(0, totalStockBefore - totalConsumed);
+
+    return {
+      ingredientId,
+      requestedQuantity: requiredAmount,
+      totalConsumed,
+      isFullyFulfilled: remainingNeeded === 0,
+      affectedBatches,
+      remainingTotalStock,
+      isLowStockAlert: remainingTotalStock <= minimumThreshold,
+    };
+  }
+}

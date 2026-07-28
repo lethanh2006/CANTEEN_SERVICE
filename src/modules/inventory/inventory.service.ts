@@ -7,6 +7,7 @@ import { CreateIngredientDto } from './dto/create-ingredient.dto';
 import { CreateInventoryBatchDto } from './dto/create-inventory-batch.dto';
 import { ConsumeIngredientDto } from './dto/consume-ingredient.dto';
 import { InventoryMinHeap, InventoryBatchNode } from './utils/min-heap';
+import { FEFOConsumptionService } from './utils/fefo-consumption';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 
 @Injectable()
@@ -102,7 +103,7 @@ export class InventoryService {
 
   /**
    * POST /api/canteen/inventory/consume
-   * Khấu trừ nguyên liệu sau khi nấu ăn (tự động trừ lô hết hạn trước - FEFO).
+   * Khấu trừ nguyên liệu sau khi nấu ăn (Sử dụng giải thuật FEFOConsumptionService).
    */
   async consumeIngredient(dto: ConsumeIngredientDto): Promise<any> {
     if (!Types.ObjectId.isValid(dto.ingredientId)) {
@@ -114,59 +115,58 @@ export class InventoryService {
       throw new NotFoundException(`Nguyên liệu với ID '${dto.ingredientId}' không tồn tại`);
     }
 
-    // Retrieve active batches sorted by expiryDate (FEFO order)
+    // Retrieve active batches from DB
     const activeBatches = await this.batchModel
       .find({ ingredientId: new Types.ObjectId(dto.ingredientId), status: 'ACTIVE', quantity: { $gt: 0 } })
       .sort({ expiryDate: 1 })
       .exec();
 
-    const totalAvailable = activeBatches.reduce((acc, b) => acc + b.quantity, 0);
-    if (totalAvailable < dto.quantity) {
-      throw new BadRequestException(
-        `Số lượng nguyên liệu trong kho không đủ (Hiện có: ${totalAvailable} ${ingredient.unit}, yêu cầu: ${dto.quantity} ${ingredient.unit})`
-      );
-    }
-
-    let remainingToDeduct = dto.quantity;
-    const updatedBatchesSummary: any[] = [];
-
+    const minHeap = new InventoryMinHeap();
     for (const batch of activeBatches) {
-      if (remainingToDeduct <= 0) break;
-
-      let deducted = 0;
-      if (batch.quantity <= remainingToDeduct) {
-        deducted = batch.quantity;
-        remainingToDeduct -= batch.quantity;
-        batch.quantity = 0;
-        batch.status = 'DEPLETED';
-      } else {
-        deducted = remainingToDeduct;
-        batch.quantity -= remainingToDeduct;
-        remainingToDeduct = 0;
-      }
-
-      await batch.save();
-      updatedBatchesSummary.push({
-        batchId: batch._id,
+      minHeap.push({
+        batchId: batch._id.toString(),
+        ingredientId: ingredient._id.toString(),
+        ingredientName: ingredient.name,
+        unit: ingredient.unit,
         expiryDate: batch.expiryDate,
-        deducted,
-        remainingInBatch: batch.quantity,
+        quantity: batch.quantity,
+        originalQuantity: batch.originalQuantity,
+        costPrice: batch.costPrice,
+        supplier: batch.supplier,
         status: batch.status,
       });
     }
 
-    // Check total remaining stock after deduction
-    const remainingBatches = await this.batchModel
-      .find({ ingredientId: new Types.ObjectId(dto.ingredientId), status: 'ACTIVE' })
-      .exec();
-    const currentTotalStock = remainingBatches.reduce((acc, b) => acc + b.quantity, 0);
+    const report = FEFOConsumptionService.consumeIngredientBatches(
+      ingredient._id.toString(),
+      dto.quantity,
+      minHeap,
+      ingredient.minimumThreshold
+    );
+
+    if (!report.isFullyFulfilled) {
+      const currentAvailable = activeBatches.reduce((acc, b) => acc + b.quantity, 0);
+      throw new BadRequestException(
+        `Số lượng nguyên liệu trong kho không đủ (Hiện có: ${currentAvailable} ${ingredient.unit}, yêu cầu: ${dto.quantity} ${ingredient.unit})`
+      );
+    }
+
+    // Persist affected batch updates to MongoDB
+    for (const affected of report.affectedBatches) {
+      await this.batchModel.findByIdAndUpdate(affected.batchId, {
+        $set: {
+          quantity: affected.remainingBatchQuantity,
+          status: affected.status,
+        },
+      }).exec();
+    }
 
     // If stock is below minimumThreshold, publish 'inventory.low_stock' event
-    if (currentTotalStock <= ingredient.minimumThreshold) {
+    if (report.isLowStockAlert) {
       await this.rabbitMQService.publish('inventory.low_stock', {
         ingredientId: ingredient._id.toString(),
         ingredientName: ingredient.name,
-        currentStock: currentTotalStock,
+        currentStock: report.remainingTotalStock,
         minimumThreshold: ingredient.minimumThreshold,
         unit: ingredient.unit,
         alertTime: new Date(),
@@ -179,11 +179,11 @@ export class InventoryService {
         name: ingredient.name,
         unit: ingredient.unit,
         minimumThreshold: ingredient.minimumThreshold,
-        totalRemainingStock: currentTotalStock,
-        isLowStock: currentTotalStock <= ingredient.minimumThreshold,
+        totalRemainingStock: report.remainingTotalStock,
+        isLowStock: report.isLowStockAlert,
       },
       consumedQuantity: dto.quantity,
-      consumedBatches: updatedBatchesSummary,
+      report,
     };
   }
 }

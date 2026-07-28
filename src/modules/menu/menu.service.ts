@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, OnModuleInit, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Category, CategoryDocument } from '../../schemas/categories.schema';
@@ -6,14 +6,59 @@ import { MenuItem, MenuItemDocument } from '../../schemas/menu_items.schema';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { MenuHistoryManager } from './utils/undo-stack';
+import { MenuSearchTrie } from './utils/menu-trie';
 
 @Injectable()
-export class MenuService {
+export class MenuService implements OnModuleInit {
+  private readonly menuTrie = new MenuSearchTrie();
+  private readonly logger = new Logger(MenuService.name);
+
   constructor(
     @InjectModel(Category.name) private readonly categoryModel: Model<CategoryDocument>,
     @InjectModel(MenuItem.name) private readonly menuItemModel: Model<MenuItemDocument>,
     private readonly menuHistoryManager: MenuHistoryManager,
-  ) { }
+  ) {}
+
+  /**
+   * Hydrate in-memory Menu Trie on module startup
+   */
+  async onModuleInit() {
+    await this.rebuildTrieIndex();
+  }
+
+  /**
+   * Rebuild the Menu Search Trie index from MongoDB
+   */
+  async rebuildTrieIndex(): Promise<void> {
+    try {
+      const allItems = await this.menuItemModel.find({ isAvailable: true }).exec();
+      this.menuTrie.clear();
+      for (const item of allItems) {
+        this.menuTrie.insert(item.name, item._id.toString());
+      }
+      this.logger.log(`Indexed ${allItems.length} menu items into in-memory Search Trie`);
+    } catch (err: any) {
+      this.logger.error(`Failed to build Menu Search Trie index: ${err.message}`);
+    }
+  }
+
+  /**
+   * GET /api/canteen/menu/search?q=...
+   * Fast real-time prefix search via RAM Trie
+   */
+  async searchMenuItems(query: string): Promise<MenuItem[]> {
+    if (!query || !query.trim()) {
+      return await this.menuItemModel.find({ isAvailable: true }).exec();
+    }
+
+    const matchedIds = this.menuTrie.searchPrefix(query);
+    if (matchedIds.length === 0) {
+      return [];
+    }
+
+    const objectIds = matchedIds.map((id) => new Types.ObjectId(id));
+    return await this.menuItemModel.find({ _id: { $in: objectIds }, isAvailable: true }).exec();
+  }
 
   /**
    * Lấy toàn bộ thực đơn đang bán (phân nhóm theo Category)
@@ -66,6 +111,9 @@ export class MenuService {
     });
 
     const savedItem = await createdMenuItem.save();
+
+    // Update Trie index
+    this.menuTrie.insert(savedItem.name, savedItem._id.toString());
 
     await this.menuHistoryManager.pushCommand(userId, {
       type: 'CREATE',
@@ -122,13 +170,14 @@ export class MenuService {
 
     const updatedMenuItem = await menuItem.save();
 
-    const newData = updatedMenuItem.toObject();
+    // Rebuild Trie on name/availability change
+    await this.rebuildTrieIndex();
 
     await this.menuHistoryManager.pushCommand(userId, {
       type: 'UPDATE',
       menuItemId: id,
       previousData,
-      newData,
+      newData: updatedMenuItem.toObject(),
     });
 
     return updatedMenuItem;
@@ -151,6 +200,9 @@ export class MenuService {
 
     await this.menuItemModel.findByIdAndDelete(id).exec();
 
+    // Rebuild Trie index after delete
+    await this.rebuildTrieIndex();
+
     await this.menuHistoryManager.pushCommand(userId, {
       type: 'DELETE',
       menuItemId: id,
@@ -171,32 +223,30 @@ export class MenuService {
     }
 
     const { type, menuItemId, previousData } = command;
+    let res: any;
 
     if (type === 'UPDATE') {
       const menuItem = await this.menuItemModel.findById(menuItemId).exec();
       if (!menuItem) {
         const restoredItem = new this.menuItemModel(previousData);
         await restoredItem.save();
-        return { message: 'Hoàn tác thành công (Khôi phục món ăn đã bị xóa)', item: restoredItem };
+        res = { message: 'Hoàn tác thành công (Khôi phục món ăn đã bị xóa)', item: restoredItem };
+      } else {
+        Object.assign(menuItem, previousData);
+        const saved = await menuItem.save();
+        res = { message: 'Hoàn tác cập nhật thành công', item: saved };
       }
-
-      Object.assign(menuItem, previousData);
-      const saved = await menuItem.save();
-      return { message: 'Hoàn tác cập nhật thành công', item: saved };
-    }
-
-    if (type === 'CREATE') {
+    } else if (type === 'CREATE') {
       await this.menuItemModel.findByIdAndDelete(menuItemId).exec();
-      return { message: 'Hoàn tác tạo mới thành công (Đã xóa món ăn)', menuItemId };
-    }
-
-    if (type === 'DELETE') {
+      res = { message: 'Hoàn tác tạo mới thành công (Đã xóa món ăn)', menuItemId };
+    } else if (type === 'DELETE') {
       const restoredItem = new this.menuItemModel(previousData);
       await restoredItem.save();
-      return { message: 'Hoàn tác xóa thành công (Khôi phục món ăn)', item: restoredItem };
+      res = { message: 'Hoàn tác xóa thành công (Khôi phục món ăn)', item: restoredItem };
     }
 
-    return { message: 'Kiểu thao tác không hỗ trợ hoàn tác' };
+    await this.rebuildTrieIndex();
+    return res;
   }
 
   /**
@@ -209,29 +259,26 @@ export class MenuService {
     }
 
     const { type, menuItemId, newData } = command;
+    let res: any;
 
     if (type === 'UPDATE') {
       const menuItem = await this.menuItemModel.findById(menuItemId).exec();
       if (!menuItem) {
         throw new NotFoundException(`Không tìm thấy món ăn với ID '${menuItemId}' để làm lại cập nhật`);
       }
-
       Object.assign(menuItem, newData);
       const saved = await menuItem.save();
-      return { message: 'Làm lại cập nhật thành công', item: saved };
-    }
-
-    if (type === 'CREATE') {
+      res = { message: 'Làm lại cập nhật thành công', item: saved };
+    } else if (type === 'CREATE') {
       const recreatedItem = new this.menuItemModel(newData);
       await recreatedItem.save();
-      return { message: 'Làm lại tạo mới thành công', item: recreatedItem };
-    }
-
-    if (type === 'DELETE') {
+      res = { message: 'Làm lại tạo mới thành công', item: recreatedItem };
+    } else if (type === 'DELETE') {
       await this.menuItemModel.findByIdAndDelete(menuItemId).exec();
-      return { message: 'Làm lại xóa thành công (Đã xóa lại món ăn)', menuItemId };
+      res = { message: 'Làm lại xóa thành công (Đã xóa lại món ăn)', menuItemId };
     }
 
-    return { message: 'Kiểu thao tác không hỗ trợ làm lại' };
+    await this.rebuildTrieIndex();
+    return res;
   }
 }

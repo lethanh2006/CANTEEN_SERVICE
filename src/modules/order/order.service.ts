@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { Order, OrderDocument } from '../../schemas/orders.schema';
 import { MenuItem, MenuItemDocument } from '../../schemas/menu_items.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { OrderDiscountCalculator, OrderItemPriceInfo } from './utils/discount-calculator';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 
 @Injectable()
@@ -33,8 +34,8 @@ export class OrderService {
       throw new BadRequestException('ID bàn ăn (tableId) không đúng định dạng ObjectId');
     }
 
-    let totalAmount = 0;
     const orderItems: any[] = [];
+    const itemPriceInfos: OrderItemPriceInfo[] = [];
 
     for (const itemDto of dto.items) {
       if (!Types.ObjectId.isValid(itemDto.menuItemId)) {
@@ -64,8 +65,11 @@ export class OrderService {
       }
 
       const unitPrice = menuItem.price;
-      const itemTotalPrice = (unitPrice + optionsTotalPrice) * itemDto.quantity;
-      totalAmount += itemTotalPrice;
+      itemPriceInfos.push({
+        unitPrice,
+        quantity: itemDto.quantity,
+        optionsPrice: optionsTotalPrice,
+      });
 
       orderItems.push({
         menuItemId: menuItem._id,
@@ -77,11 +81,13 @@ export class OrderService {
       });
     }
 
+    // Calculate totals & discounts via OrderDiscountCalculator
+    const discountResult = OrderDiscountCalculator.calculateFinalPrice(itemPriceInfos, {
+      dailySubsidyAmount: userRole === 'user' || userRole === 'vip' ? 0 : 0, // Adjustable business subsidy
+    });
+
     const count = await this.orderModel.countDocuments().exec();
     const orderNumber = `#${1001 + count}`;
-
-    const discountAmount = 0;
-    const finalAmount = totalAmount - discountAmount;
 
     const newOrder = new this.orderModel({
       orderNumber,
@@ -89,9 +95,9 @@ export class OrderService {
       userRole,
       tableId: dto.tableId ? new Types.ObjectId(dto.tableId) : null,
       items: orderItems,
-      totalAmount,
-      discountAmount,
-      finalAmount,
+      totalAmount: discountResult.rawTotal,
+      discountAmount: discountResult.totalDiscount,
+      finalAmount: discountResult.finalAmount,
       status: 'CREATED',
       priorityScore: 0,
       paymentStatus: 'PENDING',
@@ -180,6 +186,8 @@ export class OrderService {
       orderNumber: updatedOrder.orderNumber,
       priorityScore: updatedOrder.priorityScore,
       confirmedAt: (updatedOrder as any).updatedAt || new Date(),
+      userRole: updatedOrder.userRole,
+      isTakeaway: !updatedOrder.tableId,
     });
 
     return updatedOrder;
