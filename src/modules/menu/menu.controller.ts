@@ -2,9 +2,9 @@ import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nes
 import { MenuService } from './menu.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
-import { RolesGuard } from './guards/roles.guard';
-import { Roles } from './decorators/roles.decorator';
-import { User } from './decorators/user.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { User } from '../../common/decorators/user.decorator';
 
 @Controller('api/canteen')
 @UseGuards(RolesGuard)

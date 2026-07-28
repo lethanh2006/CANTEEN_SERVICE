@@ -1,9 +1,9 @@
 import { Controller, Get, Post, Patch, Body, Param, UseGuards } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { RolesGuard } from '../menu/guards/roles.guard';
-import { Roles } from '../menu/decorators/roles.decorator';
-import { User } from '../menu/decorators/user.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { User } from '../../common/decorators/user.decorator';
 
 @Controller('api/canteen/orders')
 @UseGuards(RolesGuard)
