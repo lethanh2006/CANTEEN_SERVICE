@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Ingredient, IngredientSchema } from '../../schemas/ingredients.schema';
 import { InventoryBatch, InventoryBatchSchema } from '../../schemas/inventory_batches.schema';
+import { InventoryController } from './inventory.controller';
+import { InventoryService } from './inventory.service';
 
 @Module({
   imports: [
@@ -10,8 +12,8 @@ import { InventoryBatch, InventoryBatchSchema } from '../../schemas/inventory_ba
       { name: InventoryBatch.name, schema: InventoryBatchSchema },
     ]),
   ],
-  controllers: [],
-  providers: [],
-  exports: [],
+  controllers: [InventoryController],
+  providers: [InventoryService],
+  exports: [InventoryService],
 })
 export class InventoryModule {}
