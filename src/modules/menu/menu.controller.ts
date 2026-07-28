@@ -5,6 +5,7 @@ import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { User } from '../../common/decorators/user.decorator';
+import { Role } from '../../common/enums/role.enum';
 
 @Controller('api/canteen')
 @UseGuards(RolesGuard)
@@ -27,7 +28,7 @@ export class MenuController {
    * Quyền hạn: Admin / Manager
    */
   @Post('admin/menu')
-  @Roles('admin', 'manager')
+  @Roles(Role.ADMIN, Role.MANAGER)
   async createMenuItem(
     @Body() createMenuItemDto: CreateMenuItemDto,
     @User() user: any,
@@ -42,7 +43,7 @@ export class MenuController {
    * Quyền hạn: Admin / Manager
    */
   @Put('admin/menu/:id')
-  @Roles('admin', 'manager')
+  @Roles(Role.ADMIN, Role.MANAGER)
   async updateMenuItem(
     @Param('id') id: string,
     @Body() updateMenuItemDto: UpdateMenuItemDto,
@@ -58,7 +59,7 @@ export class MenuController {
    * Quyền hạn: Admin / Manager
    */
   @Delete('admin/menu/:id')
-  @Roles('admin', 'manager')
+  @Roles(Role.ADMIN, Role.MANAGER)
   async deleteMenuItem(
     @Param('id') id: string,
     @User() user: any,
@@ -73,7 +74,7 @@ export class MenuController {
    * Quyền hạn: Admin / Manager
    */
   @Post('admin/menu/undo')
-  @Roles('admin', 'manager')
+  @Roles(Role.ADMIN, Role.MANAGER)
   async undoMenuItemChange(@User() user: any) {
     const userId = user?._id || user?.id || 'system';
     return this.menuService.undoMenuItemChange(userId);
@@ -85,7 +86,7 @@ export class MenuController {
    * Quyền hạn: Admin / Manager
    */
   @Post('admin/menu/redo')
-  @Roles('admin', 'manager')
+  @Roles(Role.ADMIN, Role.MANAGER)
   async redoMenuItemChange(@User() user: any) {
     const userId = user?._id || user?.id || 'system';
     return this.menuService.redoMenuItemChange(userId);

@@ -4,6 +4,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { User } from '../../common/decorators/user.decorator';
+import { Role } from '../../common/enums/role.enum';
 
 @Controller('api/canteen/orders')
 @UseGuards(RolesGuard)
@@ -49,7 +50,7 @@ export class OrderController {
    * Quyền hạn: Thu ngân / Admin / Manager
    */
   @Patch(':id/confirm')
-  @Roles('admin', 'manager', 'cashier', 'waiter')
+  @Roles(Role.ADMIN, Role.MANAGER, Role.CASHIER, Role.WAITER)
   async confirmOrder(@Param('id') id: string) {
     return this.orderService.confirmOrder(id);
   }
@@ -60,7 +61,7 @@ export class OrderController {
    * Quyền hạn: Thu ngân / Admin / Manager
    */
   @Patch(':id/complete')
-  @Roles('admin', 'manager', 'cashier', 'waiter')
+  @Roles(Role.ADMIN, Role.MANAGER, Role.CASHIER, Role.WAITER)
   async completeOrder(@Param('id') id: string) {
     return this.orderService.completeOrder(id);
   }

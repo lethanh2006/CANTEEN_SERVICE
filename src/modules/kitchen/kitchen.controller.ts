@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Param, UseGuards } from '@nestjs/common';
 import { KitchenService } from './kitchen.service';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '../../common/enums/role.enum';
 
 @Controller('api/canteen/kitchen')
 @UseGuards(RolesGuard)
@@ -14,7 +15,7 @@ export class KitchenController {
    * Quyền hạn: Đầu bếp / Admin / Manager
    */
   @Get('queue')
-  @Roles('chef', 'admin', 'manager')
+  @Roles(Role.CHEF, Role.ADMIN, Role.MANAGER)
   async getQueue() {
     return this.kitchenService.getQueue();
   }
@@ -25,7 +26,7 @@ export class KitchenController {
    * Quyền hạn: Đầu bếp / Admin / Manager
    */
   @Post('next')
-  @Roles('chef', 'admin', 'manager')
+  @Roles(Role.CHEF, Role.ADMIN, Role.MANAGER)
   async getNextOrder() {
     return this.kitchenService.getNextOrder();
   }
@@ -36,7 +37,7 @@ export class KitchenController {
    * Quyền hạn: Đầu bếp / Admin / Manager
    */
   @Patch('orders/:id/cooking')
-  @Roles('chef', 'admin', 'manager')
+  @Roles(Role.CHEF, Role.ADMIN, Role.MANAGER)
   async setOrderCooking(@Param('id') id: string) {
     return this.kitchenService.setOrderCooking(id);
   }
@@ -47,7 +48,7 @@ export class KitchenController {
    * Quyền hạn: Đầu bếp / Admin / Manager
    */
   @Patch('orders/:id/ready')
-  @Roles('chef', 'admin', 'manager')
+  @Roles(Role.CHEF, Role.ADMIN, Role.MANAGER)
   async setOrderReady(@Param('id') id: string) {
     return this.kitchenService.setOrderReady(id);
   }
