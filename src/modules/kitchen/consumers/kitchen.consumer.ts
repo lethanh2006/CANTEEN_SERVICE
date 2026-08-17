@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { RabbitMQService } from '../../rabbitmq/rabbitmq.service';
-import { KitchenService } from '../kitchen.service';
+import { KitchenService, OrderConfirmedEvent } from '../kitchen.service';
 
 @Injectable()
 export class KitchenConsumer implements OnModuleInit {
@@ -12,10 +12,15 @@ export class KitchenConsumer implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    // Subscribe to order.confirmed event from RabbitMQ
-    await this.rabbitMQService.subscribe('order.confirmed', async (eventData) => {
-      this.logger.log(`Received 'order.confirmed' event for order ${eventData.orderId} (${eventData.orderNumber})`);
-      await this.kitchenService.handleOrderConfirmedEvent(eventData);
-    });
+    // Đăng ký nhận sự kiện xác nhận đơn hàng từ RabbitMQ.
+    await this.rabbitMQService.subscribe<OrderConfirmedEvent>(
+      'order.confirmed',
+      (eventData) => {
+        this.logger.log(
+          `Đã nhận sự kiện xác nhận cho đơn ${eventData.orderId} (${eventData.orderNumber})`,
+        );
+        this.kitchenService.handleOrderConfirmedEvent(eventData);
+      },
+    );
   }
 }

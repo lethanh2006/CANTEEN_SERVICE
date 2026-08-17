@@ -8,29 +8,28 @@ export interface KitchenOrderNode {
 }
 
 /**
- * KitchenPriorityQueue
- * Max Heap data structure for managing kitchen orders by priority score.
- * Complexity: Push O(log N), Pop O(log N), Peek O(1).
+ * Hàng đợi Max Heap quản lý đơn bếp theo điểm ưu tiên.
+ * Độ phức tạp: thêm O(log N), lấy ra O(log N), xem phần tử đầu O(1).
  */
 export class KitchenPriorityQueue {
   private heap: KitchenOrderNode[] = [];
 
   /**
-   * Get current queue size
+   * Lấy số đơn hiện có trong hàng đợi.
    */
   size(): number {
     return this.heap.length;
   }
 
   /**
-   * Check if queue is empty
+   * Kiểm tra hàng đợi có rỗng hay không.
    */
   isEmpty(): boolean {
     return this.heap.length === 0;
   }
 
   /**
-   * Push a new order node into the Max Heap
+   * Thêm một đơn mới vào Max Heap.
    */
   push(node: KitchenOrderNode): void {
     this.heap.push(node);
@@ -38,7 +37,7 @@ export class KitchenPriorityQueue {
   }
 
   /**
-   * Pop the highest-priority order node from the heap
+   * Lấy và xóa đơn có độ ưu tiên cao nhất.
    */
   pop(): KitchenOrderNode | null {
     if (this.size() === 0) return null;
@@ -53,21 +52,21 @@ export class KitchenPriorityQueue {
   }
 
   /**
-   * Peek at the highest-priority order node without removing it
+   * Xem đơn có độ ưu tiên cao nhất mà không xóa khỏi hàng đợi.
    */
   peek(): KitchenOrderNode | null {
     return this.size() > 0 ? this.heap[0] : null;
   }
 
   /**
-   * Get all elements in the heap as an array (for queue visualization API)
+   * Sao chép các phần tử thành mảng để phục vụ API hiển thị hàng đợi.
    */
   toArray(): KitchenOrderNode[] {
     return [...this.heap];
   }
 
   /**
-   * Maintain Max Heap property upwards when inserting
+   * Dịch phần tử lên để giữ đúng tính chất Max Heap sau khi thêm.
    */
   private siftUp(index: number): void {
     let current = index;
@@ -82,7 +81,7 @@ export class KitchenPriorityQueue {
   }
 
   /**
-   * Maintain Max Heap property downwards when popping
+   * Dịch phần tử xuống để giữ đúng tính chất Max Heap sau khi lấy ra.
    */
   private siftDown(index: number): void {
     let current = index;
@@ -93,11 +92,16 @@ export class KitchenPriorityQueue {
       const rightChild = current * 2 + 2;
       let largest = current;
 
-      if (this.heap[leftChild].priorityScore > this.heap[largest].priorityScore) {
+      if (
+        this.heap[leftChild].priorityScore > this.heap[largest].priorityScore
+      ) {
         largest = leftChild;
       }
 
-      if (rightChild < length && this.heap[rightChild].priorityScore > this.heap[largest].priorityScore) {
+      if (
+        rightChild < length &&
+        this.heap[rightChild].priorityScore > this.heap[largest].priorityScore
+      ) {
         largest = rightChild;
       }
 
@@ -111,7 +115,7 @@ export class KitchenPriorityQueue {
   }
 
   /**
-   * Swap two nodes in the heap array
+   * Hoán đổi hai phần tử trong Heap.
    */
   private swap(i: number, j: number): void {
     const temp = this.heap[i];
@@ -120,23 +124,30 @@ export class KitchenPriorityQueue {
   }
 
   /**
-   * Refresh waiting time scores periodically to prevent order starvation
+   * Cập nhật điểm chờ định kỳ để đơn cũ không bị bỏ đói.
    */
-  refreshPriorities(computeScoreFn: (node: KitchenOrderNode, waitMinutes: number) => number): void {
+  refreshPriorities(
+    computeScoreFn: (node: KitchenOrderNode, waitMinutes: number) => number,
+  ): void {
     const now = new Date().getTime();
     for (let i = 0; i < this.heap.length; i++) {
-      const waitMinutes = Math.max(0, Math.floor((now - new Date(this.heap[i].confirmedAt).getTime()) / 60000));
+      const waitMinutes = Math.max(
+        0,
+        Math.floor(
+          (now - new Date(this.heap[i].confirmedAt).getTime()) / 60000,
+        ),
+      );
       this.heap[i].priorityScore = computeScoreFn(this.heap[i], waitMinutes);
     }
 
-    // Rebuild Max Heap (Heapify O(N))
+    // Dựng lại Max Heap với độ phức tạp O(N).
     for (let i = Math.floor(this.size() / 2) - 1; i >= 0; i--) {
       this.siftDown(i);
     }
   }
 
   /**
-   * Clear the priority queue
+   * Xóa toàn bộ phần tử trong hàng đợi.
    */
   clear(): void {
     this.heap = [];

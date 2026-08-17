@@ -1,9 +1,16 @@
-import { Injectable, OnModuleInit, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Order, OrderDocument } from '../../schemas/orders.schema';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
-import { KitchenPriorityQueue, KitchenOrderNode } from './utils/priority_queue';
+import { KitchenPriorityQueue } from './utils/priority_queue';
+import { toError } from '../../common/utils/error.util';
 
 @Injectable()
 export class KitchenService implements OnModuleInit {
@@ -16,14 +23,14 @@ export class KitchenService implements OnModuleInit {
   ) {}
 
   /**
-   * On module init, hydrate RAM Priority Queue from active CONFIRMED orders in DB
+   * Nạp các đơn CONFIRMED vào hàng đợi ưu tiên khi mô-đun khởi động.
    */
   async onModuleInit() {
     await this.hydrateQueueFromDB();
   }
 
   /**
-   * Hydrate in-memory Priority Queue from DB
+   * Nạp hàng đợi ưu tiên trong bộ nhớ từ cơ sở dữ liệu.
    */
   private async hydrateQueueFromDB(): Promise<void> {
     try {
@@ -38,28 +45,27 @@ export class KitchenService implements OnModuleInit {
           orderId: order._id.toString(),
           orderNumber: order.orderNumber,
           priorityScore: order.priorityScore || 0,
-          confirmedAt: (order as any).updatedAt || (order as any).createdAt || new Date(),
+          confirmedAt: order.updatedAt ?? order.createdAt,
           userRole: order.userRole,
           isTakeaway: !order.tableId,
         });
       }
-      this.logger.log(`Hydrated Kitchen Priority Queue with ${this.priorityQueue.size()} orders from DB`);
-    } catch (err: any) {
-      this.logger.error(`Failed to hydrate Kitchen Priority Queue: ${err.message}`);
+      this.logger.log(
+        `Đã nạp ${this.priorityQueue.size()} đơn hàng vào hàng đợi ưu tiên của bếp`,
+      );
+    } catch (err: unknown) {
+      const error = toError(err);
+      this.logger.error(
+        `Không thể nạp hàng đợi ưu tiên của bếp: ${error.message}`,
+        error.stack,
+      );
     }
   }
 
   /**
-   * Handle order.confirmed event published by OrderService/RabbitMQ
+   * Xử lý sự kiện xác nhận đơn hàng nhận từ RabbitMQ.
    */
-  async handleOrderConfirmedEvent(eventData: {
-    orderId: string;
-    orderNumber: string;
-    priorityScore: number;
-    confirmedAt: Date;
-    userRole?: string;
-    isTakeaway?: boolean;
-  }): Promise<void> {
+  handleOrderConfirmedEvent(eventData: OrderConfirmedEvent): void {
     this.priorityQueue.push({
       orderId: eventData.orderId,
       orderNumber: eventData.orderNumber,
@@ -68,12 +74,14 @@ export class KitchenService implements OnModuleInit {
       userRole: eventData.userRole,
       isTakeaway: eventData.isTakeaway,
     });
-    this.logger.log(`Pushed Order ${eventData.orderNumber} to RAM Kitchen Priority Queue (Score: ${eventData.priorityScore})`);
+    this.logger.log(
+      `Đã thêm đơn ${eventData.orderNumber} vào hàng đợi của bếp (điểm: ${eventData.priorityScore})`,
+    );
   }
 
   /**
    * GET /api/canteen/kitchen/queue
-   * View orders in Priority Queue sorted by Priority Score
+   * Xem các đơn trong hàng đợi theo điểm ưu tiên giảm dần.
    */
   async getQueue(): Promise<Order[]> {
     if (this.priorityQueue.isEmpty()) {
@@ -87,7 +95,9 @@ export class KitchenService implements OnModuleInit {
     orderNodes.sort((a, b) => b.priorityScore - a.priorityScore);
 
     const orderIds = orderNodes.map((node) => new Types.ObjectId(node.orderId));
-    const orders = await this.orderModel.find({ _id: { $in: orderIds } }).exec();
+    const orders = await this.orderModel
+      .find({ _id: { $in: orderIds } })
+      .exec();
 
     const orderMap = new Map(orders.map((o) => [o._id.toString(), o]));
     const result: Order[] = [];
@@ -103,10 +113,10 @@ export class KitchenService implements OnModuleInit {
 
   /**
    * POST /api/canteen/kitchen/next
-   * Pop highest priority order from Max Heap RAM Priority Queue and mark as COOKING
+   * Lấy đơn ưu tiên cao nhất khỏi Max Heap và chuyển sang COOKING.
    */
   async getNextOrder(): Promise<Order> {
-    let nextNode = this.priorityQueue.pop();
+    const nextNode = this.priorityQueue.pop();
 
     let nextOrder: OrderDocument | null = null;
 
@@ -122,7 +132,9 @@ export class KitchenService implements OnModuleInit {
     }
 
     if (!nextOrder) {
-      throw new NotFoundException('Không có đơn hàng nào đang chờ trong hàng đợi nhà bếp');
+      throw new NotFoundException(
+        'Không có đơn hàng nào đang chờ trong hàng đợi nhà bếp',
+      );
     }
 
     nextOrder.status = 'COOKING';
@@ -131,13 +143,9 @@ export class KitchenService implements OnModuleInit {
 
   /**
    * PATCH /api/canteen/kitchen/orders/:id/cooking
-   * Mark order status as COOKING
+   * Chuyển trạng thái đơn hàng sang COOKING.
    */
   async setOrderCooking(id: string): Promise<Order> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('ID đơn hàng không đúng định dạng ObjectId');
-    }
-
     const order = await this.orderModel.findById(id).exec();
     if (!order) {
       throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
@@ -148,7 +156,9 @@ export class KitchenService implements OnModuleInit {
     }
 
     if (order.status !== 'CONFIRMED') {
-      throw new BadRequestException(`Đơn hàng ở trạng thái '${order.status}' không thể chuyển sang COOKING (Chỉ đơn CONFIRMED mới có thể nấu)`);
+      throw new ConflictException(
+        `Đơn hàng ở trạng thái '${order.status}' không thể chuyển sang COOKING (chỉ đơn CONFIRMED mới có thể nấu)`,
+      );
     }
 
     order.status = 'COOKING';
@@ -157,13 +167,9 @@ export class KitchenService implements OnModuleInit {
 
   /**
    * PATCH /api/canteen/kitchen/orders/:id/ready
-   * Mark dish preparation as READY and publish order.ready event
+   * Chuyển đơn sang READY và phát sự kiện món đã sẵn sàng.
    */
   async setOrderReady(id: string): Promise<Order> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('ID đơn hàng không đúng định dạng ObjectId');
-    }
-
     const order = await this.orderModel.findById(id).exec();
     if (!order) {
       throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
@@ -174,7 +180,9 @@ export class KitchenService implements OnModuleInit {
     }
 
     if (order.status !== 'COOKING' && order.status !== 'CONFIRMED') {
-      throw new BadRequestException(`Đơn hàng ở trạng thái '${order.status}' không thể chuyển sang READY (Cần ở trạng thái CONFIRMED hoặc COOKING)`);
+      throw new ConflictException(
+        `Đơn hàng ở trạng thái '${order.status}' không thể chuyển sang READY (cần ở trạng thái CONFIRMED hoặc COOKING)`,
+      );
     }
 
     order.status = 'READY';
@@ -184,9 +192,18 @@ export class KitchenService implements OnModuleInit {
       orderId: updatedOrder._id.toString(),
       orderNumber: updatedOrder.orderNumber,
       status: updatedOrder.status,
-      updatedAt: (updatedOrder as any).updatedAt || new Date(),
+      updatedAt: updatedOrder.updatedAt,
     });
 
     return updatedOrder;
   }
+}
+
+export interface OrderConfirmedEvent {
+  orderId: string;
+  orderNumber: string;
+  priorityScore: number;
+  confirmedAt: Date;
+  userRole?: string;
+  isTakeaway?: boolean;
 }

@@ -16,7 +16,11 @@ const SelectedOptionSchema = SchemaFactory.createForClass(SelectedOption);
 
 @Schema({ _id: false })
 export class OrderItem {
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'MenuItem', required: true })
+  @Prop({
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'MenuItem',
+    required: true,
+  })
   menuItemId: Types.ObjectId;
 
   @Prop({ required: true })
@@ -39,6 +43,9 @@ const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
 
 @Schema({ timestamps: true })
 export class Order {
+  createdAt: Date;
+  updatedAt: Date;
+
   @Prop({ required: true, unique: true })
   orderNumber: string;
 
@@ -48,7 +55,12 @@ export class Order {
   @Prop({ required: true, default: 'user' }) // 'user' | 'manager' | 'vip'
   userRole: string;
 
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Table', required: false, default: null })
+  @Prop({
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Table',
+    required: false,
+    default: null,
+  })
   tableId: Types.ObjectId | null;
 
   @Prop({ type: [OrderItemSchema], required: true })
@@ -65,7 +77,15 @@ export class Order {
 
   @Prop({
     required: true,
-    enum: ['CREATED', 'CONFIRMED', 'COOKING', 'READY', 'COMPLETED', 'PAID', 'CANCELLED'],
+    enum: [
+      'CREATED',
+      'CONFIRMED',
+      'COOKING',
+      'READY',
+      'COMPLETED',
+      'PAID',
+      'CANCELLED',
+    ],
     default: 'CREATED',
   })
   status: string;

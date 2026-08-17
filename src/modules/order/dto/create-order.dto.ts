@@ -1,4 +1,14 @@
-import { IsNotEmpty, IsString, IsOptional, IsNumber, Min, IsArray, ValidateNested, IsEnum } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsMongoId,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class OrderSelectedOptionDto {
@@ -14,7 +24,7 @@ export class OrderSelectedOptionDto {
 
 export class CreateOrderItemDto {
   @IsNotEmpty({ message: 'ID món ăn (menuItemId) không được để trống' })
-  @IsString({ message: 'ID món ăn phải là chuỗi ObjectId' })
+  @IsMongoId({ message: 'ID món ăn không đúng định dạng ObjectId' })
   menuItemId: string;
 
   @IsNotEmpty({ message: 'Số lượng không được để trống' })
@@ -35,7 +45,7 @@ export class CreateOrderItemDto {
 
 export class CreateOrderDto {
   @IsOptional()
-  @IsString({ message: 'ID bàn ăn (tableId) phải là chuỗi ObjectId' })
+  @IsMongoId({ message: 'ID bàn ăn không đúng định dạng ObjectId' })
   tableId?: string;
 
   @IsNotEmpty({ message: 'Danh sách món ăn (items) không được để trống' })
@@ -45,6 +55,8 @@ export class CreateOrderDto {
   items: CreateOrderItemDto[];
 
   @IsOptional()
-  @IsEnum(['CASH', 'VNPAY', 'MOMO', 'VIETQR'], { message: 'Phương thức thanh toán không hợp lệ' })
+  @IsEnum(['CASH', 'VNPAY', 'MOMO', 'VIETQR'], {
+    message: 'Phương thức thanh toán không hợp lệ',
+  })
   paymentMethod?: string;
 }

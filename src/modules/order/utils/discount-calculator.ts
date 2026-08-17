@@ -1,10 +1,10 @@
 export interface DiscountRule {
   voucherCode?: string;
-  discountPercent?: number;    // e.g. 10%
-  flatDiscount?: number;       // e.g. 20000 VND
-  maxDiscountAmount?: number;  // Capped max discount
-  minOrderAmount?: number;     // Min order threshold to qualify
-  dailySubsidyAmount?: number; // Company meal allowance subsidy
+  discountPercent?: number; // Phần trăm giảm giá, ví dụ 10%.
+  flatDiscount?: number; // Số tiền giảm cố định, ví dụ 20.000 đồng.
+  maxDiscountAmount?: number; // Mức giảm tối đa.
+  minOrderAmount?: number; // Giá trị đơn tối thiểu để được áp dụng.
+  dailySubsidyAmount?: number; // Trợ cấp bữa ăn hằng ngày của công ty.
 }
 
 export interface OrderItemPriceInfo {
@@ -23,16 +23,15 @@ export interface CalculationResult {
 }
 
 /**
- * OrderDiscountCalculator
- * Optimized order total & discount calculation service
+ * Tính tổng tiền, giảm giá và trợ cấp cho đơn hàng.
  */
 export class OrderDiscountCalculator {
   /**
-   * Calculate exact raw total, voucher discount, company daily subsidy, and final payable amount
+   * Tính tiền gốc, giảm giá, trợ cấp và số tiền cuối cùng cần thanh toán.
    */
   static calculateFinalPrice(
     items: OrderItemPriceInfo[],
-    rule?: DiscountRule
+    rule?: DiscountRule,
   ): CalculationResult {
     const rawTotal = items.reduce((sum, item) => {
       return sum + (item.unitPrice + item.optionsPrice) * item.quantity;

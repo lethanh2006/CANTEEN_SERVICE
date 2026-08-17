@@ -1,10 +1,20 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  UseGuards,
+} from '@nestjs/common';
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { User } from '../../common/decorators/user.decorator';
 import { Role } from '../../common/enums/role.enum';
+import { ParseObjectIdPipe } from '../../common/pipes/parse-object-id.pipe';
+import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 
 @Controller('api/canteen/orders')
 @UseGuards(RolesGuard)
@@ -13,13 +23,13 @@ export class OrderController {
 
   /**
    * POST /api/canteen/orders
-   * Tạo giỏ hàng và đặt món (Trạng thái ban đầu: CREATED)
-   * Quyền hạn: Nhân viên (Logged-in user)
+   * Tạo đơn hàng với trạng thái ban đầu là CREATED.
+   * Quyền hạn: Người dùng đã đăng nhập.
    */
   @Post()
   async createOrder(
     @Body() createOrderDto: CreateOrderDto,
-    @User() user: any,
+    @User() user: AuthenticatedUser,
   ) {
     return this.orderService.createOrder(createOrderDto, user);
   }
@@ -27,42 +37,48 @@ export class OrderController {
   /**
    * GET /api/canteen/orders/my-orders
    * Xem lịch sử đơn hàng cá nhân
-   * Quyền hạn: Nhân viên (Logged-in user)
+   * Quyền hạn: Người dùng đã đăng nhập.
    */
   @Get('my-orders')
-  async getMyOrders(@User() user: any) {
+  async getMyOrders(@User() user: AuthenticatedUser) {
     return this.orderService.getMyOrders(user);
   }
 
   /**
    * GET /api/canteen/orders/:id
    * Lấy thông tin chi tiết của một đơn hàng
-   * Quyền hạn: Nhân viên / Bếp
+   * Quyền hạn: Nhân viên hoặc bộ phận bếp.
    */
   @Get(':id')
-  async getOrderById(@Param('id') id: string) {
+  async getOrderById(
+    @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
+  ) {
     return this.orderService.getOrderById(id);
   }
 
   /**
    * PATCH /api/canteen/orders/:id/confirm
    * Xác nhận đơn hàng, tính điểm ưu tiên và gửi sự kiện chế biến
-   * Quyền hạn: Thu ngân / Admin / Manager
+   * Quyền hạn: Thu ngân, quản trị viên, quản lý hoặc nhân viên phục vụ.
    */
   @Patch(':id/confirm')
   @Roles(Role.ADMIN, Role.MANAGER, Role.CASHIER, Role.WAITER)
-  async confirmOrder(@Param('id') id: string) {
+  async confirmOrder(
+    @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
+  ) {
     return this.orderService.confirmOrder(id);
   }
 
   /**
    * PATCH /api/canteen/orders/:id/complete
-   * Xác nhận khách đã nhận món ăn thành công, đóng Order
-   * Quyền hạn: Thu ngân / Admin / Manager
+   * Xác nhận khách đã nhận món và đóng đơn hàng.
+   * Quyền hạn: Thu ngân, quản trị viên, quản lý hoặc nhân viên phục vụ.
    */
   @Patch(':id/complete')
   @Roles(Role.ADMIN, Role.MANAGER, Role.CASHIER, Role.WAITER)
-  async completeOrder(@Param('id') id: string) {
+  async completeOrder(
+    @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
+  ) {
     return this.orderService.completeOrder(id);
   }
 }
