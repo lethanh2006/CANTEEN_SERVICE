@@ -1,6 +1,12 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
+import { toError } from '../../common/utils/error.util';
 
 @Injectable()
 export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
@@ -12,15 +18,20 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     try {
-      const host = this.configService.get<string>('Rabbitmq_Host') || 'localhost';
-      const username = this.configService.get<string>('RABBITMQ_USER') ||
-        this.configService.get<string>('Rabbitmq_Username') || 'guest';
-      const password = this.configService.get<string>('RABBITMQ_PASSWORD') ||
-        this.configService.get<string>('Rabbitmq_Password') || 'guest';
+      const host =
+        this.configService.get<string>('Rabbitmq_Host') || 'localhost';
+      const username =
+        this.configService.get<string>('RABBITMQ_USER') ||
+        this.configService.get<string>('Rabbitmq_Username') ||
+        'guest';
+      const password =
+        this.configService.get<string>('RABBITMQ_PASSWORD') ||
+        this.configService.get<string>('Rabbitmq_Password') ||
+        'guest';
       const port = Number(
         this.configService.get<string>('RABBITMQ_AMQP_HOST_PORT') ||
-        this.configService.get<string>('Rabbitmq_Port') ||
-        5672,
+          this.configService.get<string>('Rabbitmq_Port') ||
+          5672,
       );
 
       this.connection = await amqp.connect({
@@ -31,15 +42,18 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
         password,
       });
       this.channel = await this.connection.createChannel();
-      this.logger.log('Successfully connected to RabbitMQ in Canteen Service');
-    } catch (error: any) {
-      this.logger.warn(`Could not connect to RabbitMQ: ${error.message}`);
+      this.logger.log('Dịch vụ căn tin đã kết nối RabbitMQ thành công');
+    } catch (err: unknown) {
+      const error = toError(err);
+      this.logger.warn(`Không thể kết nối RabbitMQ: ${error.message}`);
     }
   }
 
-  async publish(queueName: string, message: any): Promise<void> {
+  async publish(queueName: string, message: unknown): Promise<void> {
     if (!this.channel) {
-      this.logger.warn(`RabbitMQ Channel is not initialized. Skipping publishing to ${queueName}`);
+      this.logger.warn(
+        `Kênh RabbitMQ chưa sẵn sàng, bỏ qua việc phát tới '${queueName}'`,
+      );
       return;
     }
     try {
@@ -49,34 +63,59 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
         Buffer.from(JSON.stringify(message)),
         { persistent: true },
       );
-      this.logger.log(`Published message to queue '${queueName}'`);
-    } catch (error: any) {
-      this.logger.error(`Failed to publish message to queue '${queueName}': ${error.message}`);
+      this.logger.log(`Đã phát thông điệp tới hàng đợi '${queueName}'`);
+    } catch (err: unknown) {
+      const error = toError(err);
+      this.logger.error(
+        `Không thể phát thông điệp tới hàng đợi '${queueName}': ${error.message}`,
+        error.stack,
+      );
     }
   }
 
-  async subscribe(queueName: string, callback: (msg: any) => Promise<void> | void): Promise<void> {
+  async subscribe<T>(
+    queueName: string,
+    callback: (msg: T) => Promise<void> | void,
+  ): Promise<void> {
     if (!this.channel) {
-      this.logger.warn(`RabbitMQ Channel is not initialized. Cannot subscribe to queue '${queueName}'`);
+      this.logger.warn(
+        `Kênh RabbitMQ chưa sẵn sàng, không thể đăng ký hàng đợi '${queueName}'`,
+      );
       return;
     }
     try {
       await this.channel.assertQueue(queueName, { durable: true });
-      await this.channel.consume(queueName, async (msg) => {
+      await this.channel.consume(queueName, (msg) => {
         if (msg) {
-          try {
-            const content = JSON.parse(msg.content.toString());
-            await callback(content);
-            this.channel?.ack(msg);
-          } catch (err: any) {
-            this.logger.error(`Error processing message from '${queueName}': ${err.message}`);
-            this.channel?.nack(msg, false, false);
-          }
+          void this.processMessage(queueName, msg, callback);
         }
       });
-      this.logger.log(`Successfully subscribed to RabbitMQ queue '${queueName}'`);
-    } catch (error: any) {
-      this.logger.error(`Failed to subscribe to queue '${queueName}': ${error.message}`);
+      this.logger.log(`Đã đăng ký hàng đợi RabbitMQ '${queueName}'`);
+    } catch (err: unknown) {
+      const error = toError(err);
+      this.logger.error(
+        `Không thể đăng ký hàng đợi '${queueName}': ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  private async processMessage<T>(
+    queueName: string,
+    message: amqp.ConsumeMessage,
+    callback: (content: T) => Promise<void> | void,
+  ): Promise<void> {
+    try {
+      const content = JSON.parse(message.content.toString()) as T;
+      await callback(content);
+      this.channel?.ack(message);
+    } catch (err: unknown) {
+      const error = toError(err);
+      this.logger.error(
+        `Không thể xử lý thông điệp từ '${queueName}': ${error.message}`,
+        error.stack,
+      );
+      this.channel?.nack(message, false, false);
     }
   }
 
@@ -84,8 +123,10 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.channel?.close();
       await this.connection?.close();
-    } catch (error) {
-      // Ignore errors on shutdown
+    } catch (err: unknown) {
+      const error = toError(err);
+      // Chỉ ghi log vì ứng dụng đang trong quá trình dừng.
+      this.logger.warn(`Không thể đóng kết nối RabbitMQ: ${error.message}`);
     }
   }
 }
