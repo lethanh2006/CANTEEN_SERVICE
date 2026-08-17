@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Table, TableDocument } from '../../schemas/tables.schema';
@@ -26,10 +30,6 @@ export class TableService {
    * Lấy thông tin bàn ăn theo ID
    */
   async getTableById(id: string): Promise<Table> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('ID bàn ăn không đúng định dạng ObjectId');
-    }
-
     const table = await this.tableModel.findById(id).exec();
     if (!table) {
       throw new NotFoundException(`Bàn ăn với ID '${id}' không tồn tại`);
@@ -39,18 +39,22 @@ export class TableService {
 
   /**
    * POST /api/canteen/tables
-   * Tạo mới bàn ăn & tự động sinh QR code url
+   * Tạo bàn ăn và tự động sinh đường dẫn mã QR.
    */
   async createTable(dto: CreateTableDto): Promise<Table> {
-    const existing = await this.tableModel.findOne({ name: dto.name.trim() }).exec();
+    const existing = await this.tableModel
+      .findOne({ name: dto.name.trim() })
+      .exec();
     if (existing) {
-      throw new BadRequestException(`Bàn ăn với tên '${dto.name}' đã tồn tại`);
+      throw new ConflictException(`Bàn ăn với tên '${dto.name}' đã tồn tại`);
     }
 
     const newTable = new this.tableModel({
       name: dto.name.trim(),
       capacity: dto.capacity,
-      qrCodeUrl: dto.qrCodeUrl || `https://canteen.domain.com/qr/tables/${encodeURIComponent(dto.name.trim())}`,
+      qrCodeUrl:
+        dto.qrCodeUrl ||
+        `https://canteen.domain.com/qr/tables/${encodeURIComponent(dto.name.trim())}`,
       status: 'empty',
     });
 
@@ -59,13 +63,12 @@ export class TableService {
 
   /**
    * PATCH /api/canteen/tables/:id/status
-   * Cập nhật trạng thái bàn ăn (empty, occupied, reserved)
+   * Cập nhật trạng thái bàn ăn: trống, đang sử dụng hoặc đã đặt trước.
    */
-  async updateTableStatus(id: string, dto: UpdateTableStatusDto): Promise<Table> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('ID bàn ăn không đúng định dạng ObjectId');
-    }
-
+  async updateTableStatus(
+    id: string,
+    dto: UpdateTableStatusDto,
+  ): Promise<Table> {
     const table = await this.tableModel.findById(id).exec();
     if (!table) {
       throw new NotFoundException(`Bàn ăn với ID '${id}' không tồn tại`);
@@ -77,10 +80,12 @@ export class TableService {
 
   /**
    * POST /api/canteen/tables/allocate
-   * Giải thuật Phân Bổ & Gộp Bàn Tự Động cho số lượng khách truyền vào
+   * Phân bổ hoặc gộp bàn tự động theo số lượng khách.
    */
-  async allocateTables(dto: AllocateTableDto): Promise<any> {
-    const emptyTableDocs = await this.tableModel.find({ status: 'empty' }).exec();
+  async allocateTables(dto: AllocateTableDto): Promise<unknown> {
+    const emptyTableDocs = await this.tableModel
+      .find({ status: 'empty' })
+      .exec();
 
     const emptyTables: TableItem[] = emptyTableDocs.map((t) => ({
       id: t._id.toString(),
@@ -89,21 +94,27 @@ export class TableService {
       status: t.status as 'empty',
     }));
 
-    const result = TableAllocationService.allocateTables(emptyTables, dto.partySize);
+    const result = TableAllocationService.allocateTables(
+      emptyTables,
+      dto.partySize,
+    );
     if (!result) {
-      throw new BadRequestException(
-        `Không đủ bàn trống để xếp chỗ cho nhóm ${dto.partySize} người (Tổng sức chứa hiện có: ${emptyTables.reduce((acc, t) => acc + t.capacity, 0)})`
+      throw new ConflictException(
+        `Không đủ bàn trống để xếp chỗ cho nhóm ${dto.partySize} người (Tổng sức chứa hiện có: ${emptyTables.reduce((acc, t) => acc + t.capacity, 0)})`,
       );
     }
 
-    // Automatically update status of allocated tables to occupied
-    const objectIds = result.allocatedTableIds.map((id) => new Types.ObjectId(id));
-    await this.tableModel.updateMany(
-      { _id: { $in: objectIds } },
-      { $set: { status: 'occupied' } }
-    ).exec();
+    // Đánh dấu các bàn vừa được phân bổ là đang sử dụng.
+    const objectIds = result.allocatedTableIds.map(
+      (id) => new Types.ObjectId(id),
+    );
+    await this.tableModel
+      .updateMany({ _id: { $in: objectIds } }, { $set: { status: 'occupied' } })
+      .exec();
 
-    const allocatedTables = await this.tableModel.find({ _id: { $in: objectIds } }).exec();
+    const allocatedTables = await this.tableModel
+      .find({ _id: { $in: objectIds } })
+      .exec();
 
     return {
       message: result.isMerged

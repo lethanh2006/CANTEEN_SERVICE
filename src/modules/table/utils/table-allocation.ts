@@ -14,19 +14,21 @@ export interface TableAllocationResult {
 }
 
 /**
- * TableAllocationService
- * Best-Fit single table selection and Greedy table merging algorithm for dynamic table assignment.
+ * Phân bổ bàn động bằng chiến lược chọn một bàn vừa đủ hoặc tham lam khi gộp bàn.
  */
 export class TableAllocationService {
   /**
-   * Automatically allocate single best-fit table or merge adjacent empty tables for partySize
+   * Chọn một bàn phù hợp nhất hoặc gộp các bàn trống cho đủ số khách.
    */
-  static allocateTables(emptyTables: TableItem[], partySize: number): TableAllocationResult | null {
+  static allocateTables(
+    emptyTables: TableItem[],
+    partySize: number,
+  ): TableAllocationResult | null {
     if (!emptyTables || emptyTables.length === 0 || partySize <= 0) {
       return null;
     }
 
-    // 1. Single Best-Fit Table Selection
+    // Bước 1: Chọn một bàn có sức chứa vừa đủ và ít chỗ thừa nhất.
     let bestSingleTable: TableItem | null = null;
     let minWaste = Infinity;
 
@@ -50,9 +52,11 @@ export class TableAllocationService {
       };
     }
 
-    // 2. Greedy Table Merging Strategy
-    // Sort empty tables descending by capacity
-    const sortedTables = [...emptyTables].sort((a, b) => b.capacity - a.capacity);
+    // Bước 2: Gộp bàn theo chiến lược tham lam.
+    // Xếp bàn trống theo sức chứa giảm dần để giảm số bàn cần gộp.
+    const sortedTables = [...emptyTables].sort(
+      (a, b) => b.capacity - a.capacity,
+    );
     const selectedTables: TableItem[] = [];
     let currentCapacity = 0;
 
@@ -71,7 +75,7 @@ export class TableAllocationService {
       }
     }
 
-    // Not enough empty tables capacity available
+    // Tổng sức chứa của các bàn trống không đủ.
     return null;
   }
 }
