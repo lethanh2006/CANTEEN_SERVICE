@@ -1,6 +1,5 @@
 import {
   Controller,
-  Get,
   Post,
   Patch,
   Body,
@@ -9,47 +8,32 @@ import {
 } from '@nestjs/common';
 import { TableService } from './table.service';
 import { CreateTableDto } from './dto/create-table.dto';
+import { UpdateTableDto } from './dto/update-table.dto';
 import { UpdateTableStatusDto } from './dto/update-table-status.dto';
 import { AllocateTableDto } from './dto/allocate-table.dto';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../common/enums/role.enum';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-object-id.pipe';
+import { createCrudController } from '../../common/crud';
+import { TableDocument } from '../../schemas/tables.schema';
+
+const TableCrudController = createCrudController<
+  TableDocument,
+  CreateTableDto,
+  UpdateTableDto
+>({
+  createDto: CreateTableDto,
+  updateDto: UpdateTableDto,
+  idFieldName: 'ID bàn ăn',
+  writeRoles: [Role.ADMIN, Role.MANAGER],
+});
 
 @Controller('api/canteen/tables')
 @UseGuards(RolesGuard)
-export class TableController {
-  constructor(private readonly tableService: TableService) {}
-
-  /**
-   * GET /api/canteen/tables
-   * Lấy danh sách tất cả các bàn ăn
-   */
-  @Get()
-  async getAllTables() {
-    return this.tableService.getAllTables();
-  }
-
-  /**
-   * GET /api/canteen/tables/:id
-   * Lấy thông tin bàn ăn theo ID
-   */
-  @Get(':id')
-  async getTableById(
-    @Param('id', new ParseObjectIdPipe('ID bàn ăn')) id: string,
-  ) {
-    return this.tableService.getTableById(id);
-  }
-
-  /**
-   * POST /api/canteen/tables
-   * Khởi tạo bàn ăn mới
-   * Quyền hạn: Quản trị viên hoặc quản lý.
-   */
-  @Post()
-  @Roles(Role.ADMIN, Role.MANAGER)
-  async createTable(@Body() createTableDto: CreateTableDto) {
-    return this.tableService.createTable(createTableDto);
+export class TableController extends TableCrudController {
+  constructor(private readonly tableService: TableService) {
+    super(tableService);
   }
 
   /**

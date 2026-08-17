@@ -7,58 +7,32 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Table, TableDocument } from '../../schemas/tables.schema';
 import { CreateTableDto } from './dto/create-table.dto';
+import { UpdateTableDto } from './dto/update-table.dto';
 import { UpdateTableStatusDto } from './dto/update-table-status.dto';
 import { AllocateTableDto } from './dto/allocate-table.dto';
 import { TableAllocationService, TableItem } from './utils/table-allocation';
+import { BaseCrudService } from '../../common/crud';
 
 @Injectable()
-export class TableService {
-  constructor(
-    @InjectModel(Table.name) private readonly tableModel: Model<TableDocument>,
-  ) {}
-
-  /**
-   * GET /api/canteen/tables
-   * Lấy danh sách tất cả các bàn ăn
-   */
-  async getAllTables(): Promise<Table[]> {
-    return await this.tableModel.find().sort({ name: 1 }).exec();
-  }
-
-  /**
-   * GET /api/canteen/tables/:id
-   * Lấy thông tin bàn ăn theo ID
-   */
-  async getTableById(id: string): Promise<Table> {
-    const table = await this.tableModel.findById(id).exec();
-    if (!table) {
-      throw new NotFoundException(`Bàn ăn với ID '${id}' không tồn tại`);
-    }
-    return table;
-  }
-
-  /**
-   * POST /api/canteen/tables
-   * Tạo bàn ăn và tự động sinh đường dẫn mã QR.
-   */
-  async createTable(dto: CreateTableDto): Promise<Table> {
-    const existing = await this.tableModel
-      .findOne({ name: dto.name.trim() })
-      .exec();
-    if (existing) {
-      throw new ConflictException(`Bàn ăn với tên '${dto.name}' đã tồn tại`);
-    }
-
-    const newTable = new this.tableModel({
-      name: dto.name.trim(),
-      capacity: dto.capacity,
-      qrCodeUrl:
-        dto.qrCodeUrl ||
-        `https://canteen.domain.com/qr/tables/${encodeURIComponent(dto.name.trim())}`,
-      status: 'empty',
+export class TableService extends BaseCrudService<
+  TableDocument,
+  CreateTableDto,
+  UpdateTableDto
+> {
+  constructor(@InjectModel(Table.name) tableModel: Model<TableDocument>) {
+    super(tableModel, {
+      resourceName: 'Bàn ăn',
+      defaultSort: { field: 'name', order: 'asc' },
+      allowedSortFields: [
+        'name',
+        'capacity',
+        'status',
+        'createdAt',
+        'updatedAt',
+      ],
+      searchFields: ['name'],
+      uniqueFields: ['name'],
     });
-
-    return await newTable.save();
   }
 
   /**
@@ -69,7 +43,7 @@ export class TableService {
     id: string,
     dto: UpdateTableStatusDto,
   ): Promise<Table> {
-    const table = await this.tableModel.findById(id).exec();
+    const table = await this.model.findById(id).exec();
     if (!table) {
       throw new NotFoundException(`Bàn ăn với ID '${id}' không tồn tại`);
     }
@@ -83,9 +57,7 @@ export class TableService {
    * Phân bổ hoặc gộp bàn tự động theo số lượng khách.
    */
   async allocateTables(dto: AllocateTableDto): Promise<unknown> {
-    const emptyTableDocs = await this.tableModel
-      .find({ status: 'empty' })
-      .exec();
+    const emptyTableDocs = await this.model.find({ status: 'empty' }).exec();
 
     const emptyTables: TableItem[] = emptyTableDocs.map((t) => ({
       id: t._id.toString(),
@@ -108,11 +80,11 @@ export class TableService {
     const objectIds = result.allocatedTableIds.map(
       (id) => new Types.ObjectId(id),
     );
-    await this.tableModel
+    await this.model
       .updateMany({ _id: { $in: objectIds } }, { $set: { status: 'occupied' } })
       .exec();
 
-    const allocatedTables = await this.tableModel
+    const allocatedTables = await this.model
       .find({ _id: { $in: objectIds } })
       .exec();
 
@@ -123,5 +95,47 @@ export class TableService {
       allocationDetails: result,
       tables: allocatedTables,
     };
+  }
+
+  protected prepareCreate(dto: CreateTableDto): Record<string, unknown> {
+    const name = dto.name.trim();
+    return {
+      ...dto,
+      name,
+      qrCodeUrl: dto.qrCodeUrl?.trim() || this.buildQrCodeUrl(name),
+      status: 'empty',
+    };
+  }
+
+  protected prepareUpdate(
+    dto: UpdateTableDto,
+    current: TableDocument,
+  ): Record<string, unknown> {
+    const name = dto.name?.trim();
+    const shouldRegenerateQr =
+      name !== undefined &&
+      dto.qrCodeUrl === undefined &&
+      current.qrCodeUrl === this.buildQrCodeUrl(current.name);
+
+    return {
+      ...dto,
+      ...(name !== undefined ? { name } : {}),
+      ...(dto.qrCodeUrl !== undefined
+        ? { qrCodeUrl: dto.qrCodeUrl.trim() }
+        : {}),
+      ...(shouldRegenerateQr ? { qrCodeUrl: this.buildQrCodeUrl(name) } : {}),
+    };
+  }
+
+  protected beforeDelete(table: TableDocument): void {
+    if (table.status !== 'empty') {
+      throw new ConflictException(
+        `Không thể xóa bàn '${table.name}' khi trạng thái là '${table.status}'`,
+      );
+    }
+  }
+
+  private buildQrCodeUrl(name: string): string {
+    return `https://canteen.domain.com/qr/tables/${encodeURIComponent(name)}`;
   }
 }
