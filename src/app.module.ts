@@ -13,6 +13,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER } from '@nestjs/core';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { CategoryModule } from './modules/category/category.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
     KitchenModule,
     InventoryModule,
     AnalyticsModule,
+    CategoryModule,
   ],
   controllers: [AppController],
   providers: [
