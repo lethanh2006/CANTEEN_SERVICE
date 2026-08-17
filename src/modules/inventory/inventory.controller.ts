@@ -15,7 +15,7 @@ export class InventoryController {
   /**
    * POST /api/canteen/inventory/ingredients
    * Khởi tạo nguyên liệu mới.
-   * Quyền hạn: Admin / Manager
+   * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Post('ingredients')
   @Roles(Role.ADMIN, Role.MANAGER)
@@ -25,8 +25,8 @@ export class InventoryController {
 
   /**
    * POST /api/canteen/inventory/batches
-   * Nhập lô hàng mới (đẩy vào Min Heap quản lý hạn sử dụng).
-   * Quyền hạn: Admin / Manager
+   * Nhập lô hàng mới vào Min Heap quản lý hạn sử dụng.
+   * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Post('batches')
   @Roles(Role.ADMIN, Role.MANAGER)
@@ -36,8 +36,8 @@ export class InventoryController {
 
   /**
    * GET /api/canteen/inventory/expiry-alerts
-   * Lấy danh sách nguyên liệu sắp hết hạn cần sử dụng trước (Min Heap).
-   * Quyền hạn: Admin / Manager / Đầu bếp
+   * Lấy danh sách lô nguyên liệu cần sử dụng trước theo hạn dùng.
+   * Quyền hạn: Quản trị viên, quản lý hoặc đầu bếp.
    */
   @Get('expiry-alerts')
   @Roles(Role.ADMIN, Role.MANAGER, Role.CHEF)
@@ -48,7 +48,7 @@ export class InventoryController {
   /**
    * POST /api/canteen/inventory/consume
    * Khấu trừ nguyên liệu sau khi nấu ăn (tự động trừ lô hết hạn trước).
-   * Quyền hạn: Đầu bếp / Admin / Manager
+   * Quyền hạn: Đầu bếp, quản trị viên hoặc quản lý.
    */
   @Post('consume')
   @Roles(Role.CHEF, Role.ADMIN, Role.MANAGER)

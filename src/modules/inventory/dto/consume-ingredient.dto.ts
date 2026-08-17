@@ -1,8 +1,8 @@
-import { IsNotEmpty, IsString, IsNumber, Min } from 'class-validator';
+import { IsMongoId, IsNotEmpty, IsNumber, Min } from 'class-validator';
 
 export class ConsumeIngredientDto {
   @IsNotEmpty({ message: 'ID nguyên liệu (ingredientId) không được để trống' })
-  @IsString({ message: 'ID nguyên liệu phải là chuỗi ObjectId' })
+  @IsMongoId({ message: 'ID nguyên liệu không đúng định dạng ObjectId' })
   ingredientId: string;
 
   @IsNotEmpty({ message: 'Số lượng khấu trừ không được để trống' })

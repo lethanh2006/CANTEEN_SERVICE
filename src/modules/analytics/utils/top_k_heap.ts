@@ -17,7 +17,7 @@ export class TopKActiveHeap {
     return this.heap.length;
   }
 
-  // Thêm món ăn vào Heap. Nếu kích thước >= K, thay thế phần tử nhỏ nhất ở gốc nếu lớn hơn.
+  // Thêm món vào Heap; khi đủ K phần tử, chỉ giữ lại món có doanh số cao hơn phần tử gốc.
   add(node: DishSalesNode): void {
     if (this.size() < this.K) {
       this.push(node);
@@ -43,7 +43,7 @@ export class TopKActiveHeap {
     return root;
   }
 
-  // Trả về kết quả Top K sắp xếp từ bán chạy nhất đến bán ít nhất
+  // Trả về K món theo thứ tự doanh số giảm dần.
   getTopK(): DishSalesNode[] {
     const result: DishSalesNode[] = [];
     const tempHeap = new TopKActiveHeap(this.K);
@@ -80,7 +80,10 @@ export class TopKActiveHeap {
         smallest = leftChild;
       }
 
-      if (rightChild < length && this.heap[rightChild].salesCount < this.heap[smallest].salesCount) {
+      if (
+        rightChild < length &&
+        this.heap[rightChild].salesCount < this.heap[smallest].salesCount
+      ) {
         smallest = rightChild;
       }
 

@@ -1,4 +1,4 @@
-import { InventoryBatchNode, InventoryMinHeap } from './min-heap';
+import { InventoryMinHeap } from './min-heap';
 
 export interface BatchConsumptionResult {
   batchId: string;
@@ -19,24 +19,27 @@ export interface InventoryDeductionReport {
 }
 
 /**
- * FEFOConsumptionService
- * First Expired First Out (FEFO) batch consumption calculation using Min Heap
+ * Tính lượng nguyên liệu cần khấu trừ theo nguyên tắc hết hạn trước, xuất trước
+ * (FEFO) bằng cấu trúc Min Heap.
  */
 export class FEFOConsumptionService {
   /**
-   * Consume raw ingredient quantity from active inventory batches based on earliest expiry date
+   * Khấu trừ nguyên liệu từ các lô đang hoạt động theo hạn sử dụng tăng dần.
    */
   static consumeIngredientBatches(
     ingredientId: string,
     requiredAmount: number,
     minHeap: InventoryMinHeap,
-    minimumThreshold: number
+    minimumThreshold: number,
   ): InventoryDeductionReport {
     let remainingNeeded = requiredAmount;
     const affectedBatches: BatchConsumptionResult[] = [];
 
     const sortedBatches = minHeap.getSortedBatches();
-    const totalStockBefore = sortedBatches.reduce((acc, b) => acc + b.quantity, 0);
+    const totalStockBefore = sortedBatches.reduce(
+      (acc, b) => acc + b.quantity,
+      0,
+    );
 
     for (const batch of sortedBatches) {
       if (remainingNeeded <= 0) break;

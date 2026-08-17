@@ -1,8 +1,16 @@
-import { IsNotEmpty, IsString, IsNumber, Min, IsOptional, IsDateString } from 'class-validator';
+import {
+  IsDateString,
+  IsMongoId,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class CreateInventoryBatchDto {
   @IsNotEmpty({ message: 'ID nguyên liệu (ingredientId) không được để trống' })
-  @IsString({ message: 'ID nguyên liệu phải là chuỗi ObjectId' })
+  @IsMongoId({ message: 'ID nguyên liệu không đúng định dạng ObjectId' })
   ingredientId: string;
 
   @IsNotEmpty({ message: 'Số lượng nhập không được để trống' })
@@ -11,7 +19,10 @@ export class CreateInventoryBatchDto {
   quantity: number;
 
   @IsNotEmpty({ message: 'Hạn sử dụng (expiryDate) không được để trống' })
-  @IsDateString({}, { message: 'Hạn sử dụng phải đúng định dạng ISO Date (YYYY-MM-DD)' })
+  @IsDateString(
+    {},
+    { message: 'Hạn sử dụng phải đúng định dạng ISO Date (YYYY-MM-DD)' },
+  )
   expiryDate: string;
 
   @IsNotEmpty({ message: 'Giá nhập không được để trống' })

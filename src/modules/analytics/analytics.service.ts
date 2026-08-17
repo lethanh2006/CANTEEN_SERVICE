@@ -9,23 +9,32 @@ import { TopKActiveHeap, DishSalesNode } from './utils/top_k_heap';
 export class AnalyticsService {
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
-    @InjectModel(MenuItem.name) private readonly menuItemModel: Model<MenuItemDocument>,
+    @InjectModel(MenuItem.name)
+    private readonly menuItemModel: Model<MenuItemDocument>,
   ) {}
 
   /**
    * GET /api/canteen/analytics/top-dishes
-   * Trả về Top K món ăn bán chạy nhất (sử dụng Top-K Min Heap)
+   * Trả về K món ăn bán chạy nhất bằng cây Min Heap.
    */
   async getTopDishes(limit: number = 10): Promise<DishSalesNode[]> {
     const k = limit && Number(limit) > 0 ? Number(limit) : 10;
 
-    // Retrieve non-cancelled orders
+    // Chỉ lấy các đơn hàng chưa bị hủy.
     const orders = await this.orderModel
       .find({ status: { $ne: 'CANCELLED' } })
       .exec();
 
-    // Aggregate sales count and revenue per menuItemId
-    const salesMap = new Map<string, { menuItemId: string; name: string; salesCount: number; totalRevenue: number }>();
+    // Tổng hợp số lượng bán và doanh thu theo từng món ăn.
+    const salesMap = new Map<
+      string,
+      {
+        menuItemId: string;
+        name: string;
+        salesCount: number;
+        totalRevenue: number;
+      }
+    >();
 
     for (const order of orders) {
       if (!order.items || order.items.length === 0) continue;
@@ -48,7 +57,7 @@ export class AnalyticsService {
       }
     }
 
-    // Build Top-K Min Heap
+    // Xây dựng Min Heap chứa K món bán chạy nhất.
     const topKHeap = new TopKActiveHeap(k);
 
     for (const dishStats of salesMap.values()) {

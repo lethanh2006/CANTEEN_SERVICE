@@ -23,7 +23,7 @@ export class InventoryMinHeap {
     this.siftUp(this.heap.length - 1);
   }
 
-  // Lấy ra lô hàng cận date nhất để chế biến
+  // Lấy lô có hạn sử dụng gần nhất để ưu tiên chế biến.
   pop(): InventoryBatchNode | null {
     if (this.size() === 0) return null;
     const root = this.heap[0];
@@ -72,7 +72,9 @@ export class InventoryMinHeap {
 
       if (rightChild < length) {
         const rightTime = new Date(this.heap[rightChild].expiryDate).getTime();
-        const currentSmallestTime = new Date(this.heap[smallest].expiryDate).getTime();
+        const currentSmallestTime = new Date(
+          this.heap[smallest].expiryDate,
+        ).getTime();
         if (rightTime < currentSmallestTime) {
           smallest = rightChild;
         }
@@ -93,7 +95,7 @@ export class InventoryMinHeap {
     this.heap[j] = temp;
   }
 
-  // Hàm trả về toàn bộ danh sách sắp xếp theo hạn sử dụng tăng dần (FEFO)
+  // Trả về toàn bộ lô theo hạn sử dụng tăng dần mà không thay đổi Heap gốc.
   getSortedBatches(): InventoryBatchNode[] {
     const tempHeap = new InventoryMinHeap();
     tempHeap.heap = [...this.heap];
