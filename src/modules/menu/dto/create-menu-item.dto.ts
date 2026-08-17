@@ -1,4 +1,14 @@
-import { IsNotEmpty, IsString, IsOptional, IsNumber, Min, IsBoolean, IsArray, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsMongoId,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class MenuItemOptionDto {
@@ -14,7 +24,7 @@ export class MenuItemOptionDto {
 
 export class CreateMenuItemDto {
   @IsNotEmpty({ message: 'Danh mục (categoryId) không được để trống' })
-  @IsString({ message: 'Danh mục (categoryId) phải là chuỗi ObjectId' })
+  @IsMongoId({ message: 'ID danh mục không đúng định dạng ObjectId' })
   categoryId: string;
 
   @IsNotEmpty({ message: 'Tên món ăn không được để trống' })

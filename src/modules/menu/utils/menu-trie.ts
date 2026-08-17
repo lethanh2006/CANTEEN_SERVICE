@@ -5,15 +5,14 @@ class TrieNode {
 }
 
 /**
- * MenuSearchTrie
- * In-memory Prefix Tree (Trie) data structure for fast menu item autocomplete & search.
- * Complexity: O(L) where L is query length.
+ * Cây tiền tố Trie trong bộ nhớ phục vụ gợi ý và tìm kiếm nhanh món ăn.
+ * Độ phức tạp O(L), với L là độ dài từ khóa tìm kiếm.
  */
 export class MenuSearchTrie {
   private root: TrieNode = new TrieNode();
 
   /**
-   * Strip Vietnamese accents and normalize string to lower case
+   * Loại bỏ dấu tiếng Việt, chuyển chữ thường và xóa khoảng trắng thừa.
    */
   private normalizeText(text: string): string {
     if (!text) return '';
@@ -27,7 +26,7 @@ export class MenuSearchTrie {
   }
 
   /**
-   * Insert a menu item into the Trie index
+   * Thêm một món ăn vào chỉ mục Trie.
    */
   insert(name: string, menuItemId: string): void {
     const normalized = this.normalizeText(name);
@@ -35,7 +34,7 @@ export class MenuSearchTrie {
 
     const words = normalized.split(/\s+/);
 
-    // Index full phrase and sub-phrases starting from each word
+    // Lập chỉ mục cho cả cụm từ đầy đủ và các cụm bắt đầu từ từng từ.
     for (let i = 0; i < words.length; i++) {
       const phrase = words.slice(i).join(' ');
       this.insertPhrase(phrase, menuItemId);
@@ -43,7 +42,7 @@ export class MenuSearchTrie {
   }
 
   /**
-   * Helper to insert a phrase into the Trie
+   * Thêm một cụm từ vào cây Trie.
    */
   private insertPhrase(phrase: string, menuItemId: string): void {
     let current = this.root;
@@ -58,7 +57,7 @@ export class MenuSearchTrie {
   }
 
   /**
-   * Search menu item IDs by matching prefix - O(L)
+   * Tìm ID món ăn theo tiền tố với độ phức tạp O(L).
    */
   searchPrefix(prefix: string): string[] {
     const normalized = this.normalizeText(prefix);
@@ -76,7 +75,7 @@ export class MenuSearchTrie {
   }
 
   /**
-   * Clear the entire Trie tree
+   * Xóa toàn bộ dữ liệu trong cây Trie.
    */
   clear(): void {
     this.root = new TrieNode();

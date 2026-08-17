@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { MenuService } from './menu.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
@@ -6,6 +16,8 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { User } from '../../common/decorators/user.decorator';
 import { Role } from '../../common/enums/role.enum';
+import { ParseObjectIdPipe } from '../../common/pipes/parse-object-id.pipe';
+import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 
 @Controller('api/canteen')
 @UseGuards(RolesGuard)
@@ -14,8 +26,8 @@ export class MenuController {
 
   /**
    * GET /api/canteen/menu
-   * Lấy toàn bộ thực đơn đang bán (phân nhóm theo Category)
-   * Quyền hạn: Tất cả (Public)
+   * Lấy toàn bộ thực đơn đang bán và phân nhóm theo danh mục.
+   * Quyền hạn: Công khai.
    */
   @Get('menu')
   async getMenu() {
@@ -24,8 +36,8 @@ export class MenuController {
 
   /**
    * GET /api/canteen/menu/search?q=...
-   * Tìm kiếm món ăn real-time bằng Trie Prefix Tree
-   * Quyền hạn: Tất cả (Public)
+   * Tìm kiếm món ăn theo thời gian thực bằng cây tiền tố Trie.
+   * Quyền hạn: Công khai.
    */
   @Get('menu/search')
   async searchMenu(@Query('q') query: string) {
@@ -35,13 +47,13 @@ export class MenuController {
   /**
    * POST /api/canteen/admin/menu
    * Tạo mới món ăn
-   * Quyền hạn: Admin / Manager
+   * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Post('admin/menu')
   @Roles(Role.ADMIN, Role.MANAGER)
   async createMenuItem(
     @Body() createMenuItemDto: CreateMenuItemDto,
-    @User() user: any,
+    @User() user: AuthenticatedUser,
   ) {
     const userId = user?._id || user?.id || 'system';
     return this.menuService.createMenuItem(createMenuItemDto, userId);
@@ -49,15 +61,15 @@ export class MenuController {
 
   /**
    * PUT /api/canteen/admin/menu/:id
-   * Cập nhật thông tin món ăn (Lưu trạng thái cũ vào Stack)
-   * Quyền hạn: Admin / Manager
+   * Cập nhật món ăn và lưu trạng thái cũ vào ngăn xếp lịch sử.
+   * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Put('admin/menu/:id')
   @Roles(Role.ADMIN, Role.MANAGER)
   async updateMenuItem(
-    @Param('id') id: string,
+    @Param('id', new ParseObjectIdPipe('ID món ăn')) id: string,
     @Body() updateMenuItemDto: UpdateMenuItemDto,
-    @User() user: any,
+    @User() user: AuthenticatedUser,
   ) {
     const userId = user?._id || user?.id || 'system';
     return this.menuService.updateMenuItem(id, updateMenuItemDto, userId);
@@ -65,14 +77,14 @@ export class MenuController {
 
   /**
    * DELETE /api/canteen/admin/menu/:id
-   * Xóa món ăn khỏi menu (Soft delete)
-   * Quyền hạn: Admin / Manager
+   * Xóa vĩnh viễn món ăn khỏi thực đơn.
+   * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Delete('admin/menu/:id')
   @Roles(Role.ADMIN, Role.MANAGER)
   async deleteMenuItem(
-    @Param('id') id: string,
-    @User() user: any,
+    @Param('id', new ParseObjectIdPipe('ID món ăn')) id: string,
+    @User() user: AuthenticatedUser,
   ) {
     const userId = user?._id || user?.id || 'system';
     return this.menuService.deleteMenuItem(id, userId);
@@ -80,24 +92,24 @@ export class MenuController {
 
   /**
    * POST /api/canteen/admin/menu/undo
-   * Hoàn tác (Undo) thao tác sửa đổi vừa thực hiện trên Menu
-   * Quyền hạn: Admin / Manager
+   * Hoàn tác thay đổi gần nhất trên thực đơn.
+   * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Post('admin/menu/undo')
   @Roles(Role.ADMIN, Role.MANAGER)
-  async undoMenuItemChange(@User() user: any) {
+  async undoMenuItemChange(@User() user: AuthenticatedUser) {
     const userId = user?._id || user?.id || 'system';
     return this.menuService.undoMenuItemChange(userId);
   }
 
   /**
    * POST /api/canteen/admin/menu/redo
-   * Làm lại (Redo) thao tác vừa hoàn tác trên Menu
-   * Quyền hạn: Admin / Manager
+   * Làm lại thay đổi vừa được hoàn tác trên thực đơn.
+   * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Post('admin/menu/redo')
   @Roles(Role.ADMIN, Role.MANAGER)
-  async redoMenuItemChange(@User() user: any) {
+  async redoMenuItemChange(@User() user: AuthenticatedUser) {
     const userId = user?._id || user?.id || 'system';
     return this.menuService.redoMenuItemChange(userId);
   }

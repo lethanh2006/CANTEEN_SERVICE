@@ -11,9 +11,9 @@ export interface MenuCommand {
 @Injectable()
 export class MenuHistoryManager {
   private readonly MAX_HISTORY_LIMIT = 50;
-  private readonly TTL_SECONDS = 86400; // 24 hours
+  private readonly TTL_SECONDS = 86400; // Lưu lịch sử trong 24 giờ.
 
-  constructor(private readonly redisService: RedisService) { }
+  constructor(private readonly redisService: RedisService) {}
 
   private getUndoKey(userId: string): string {
     return `canteen:undo:${userId}`;

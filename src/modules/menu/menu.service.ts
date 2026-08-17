@@ -2,8 +2,8 @@ import {
   Injectable,
   OnModuleInit,
   BadRequestException,
+  ConflictException,
   NotFoundException,
-  InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -21,46 +21,39 @@ export class MenuService implements OnModuleInit {
   private readonly logger = new Logger(MenuService.name);
 
   constructor(
-    @InjectModel(Category.name) private readonly categoryModel: Model<CategoryDocument>,
-    @InjectModel(MenuItem.name) private readonly menuItemModel: Model<MenuItemDocument>,
+    @InjectModel(Category.name)
+    private readonly categoryModel: Model<CategoryDocument>,
+    @InjectModel(MenuItem.name)
+    private readonly menuItemModel: Model<MenuItemDocument>,
     private readonly menuHistoryManager: MenuHistoryManager,
   ) {}
 
   /**
-   * Hydrate in-memory Menu Trie on module startup
+   * Nạp dữ liệu vào cây Trie trong bộ nhớ khi mô-đun khởi động.
    */
   async onModuleInit() {
     await this.rebuildTrieIndex();
   }
 
   /**
-   * Rebuild the Menu Search Trie index from MongoDB
+   * Xây dựng lại chỉ mục tìm kiếm Trie từ MongoDB.
    */
   async rebuildTrieIndex(): Promise<void> {
-    try {
-      const allItems = await this.menuItemModel.find({ isAvailable: true }).exec();
-      this.menuTrie.clear();
-      for (const item of allItems) {
-        this.menuTrie.insert(item.name, item._id.toString());
-      }
-      this.logger.log(`Indexed ${allItems.length} menu items into in-memory Search Trie`);
-    } catch (err: unknown) {
-      const error = err instanceof Error ? err : new Error(String(err));
-
-      this.logger.error(
-        `Failed to build Menu Search Trie index: ${error.message}`,
-        error.stack,
-      );
-
-      throw new InternalServerErrorException(
-        'Không thể xây dựng lại chỉ mục tìm kiếm thực đơn',
-      );
+    const allItems = await this.menuItemModel
+      .find({ isAvailable: true })
+      .exec();
+    this.menuTrie.clear();
+    for (const item of allItems) {
+      this.menuTrie.insert(item.name, item._id.toString());
     }
+    this.logger.log(
+      `Đã lập chỉ mục ${allItems.length} món ăn vào cây Trie trong bộ nhớ`,
+    );
   }
 
   /**
    * GET /api/canteen/menu/search?q=...
-   * Fast real-time prefix search via RAM Trie
+   * Tìm kiếm tiền tố theo thời gian thực bằng cây Trie trong bộ nhớ.
    */
   async searchMenuItems(query: string): Promise<MenuItem[]> {
     if (!query || !query.trim()) {
@@ -73,11 +66,13 @@ export class MenuService implements OnModuleInit {
     }
 
     const objectIds = matchedIds.map((id) => new Types.ObjectId(id));
-    return await this.menuItemModel.find({ _id: { $in: objectIds }, isAvailable: true }).exec();
+    return await this.menuItemModel
+      .find({ _id: { $in: objectIds }, isAvailable: true })
+      .exec();
   }
 
   /**
-   * Lấy toàn bộ thực đơn đang bán (phân nhóm theo Category)
+   * Lấy toàn bộ thực đơn đang bán và phân nhóm theo danh mục.
    */
   async getMenu(): Promise<any[]> {
     const categories = await this.categoryModel
@@ -101,23 +96,26 @@ export class MenuService implements OnModuleInit {
   }
 
   /**
-   * Tạo mới một món ăn
+   * Tạo mới một món ăn.
    */
-  async createMenuItem(dto: CreateMenuItemDto, userId = 'system'): Promise<MenuItem> {
-    if (!Types.ObjectId.isValid(dto.categoryId)) {
-      throw new BadRequestException('ID danh mục (categoryId) không đúng định dạng ObjectId');
-    }
-
-    const categoryExists = await this.categoryModel.findById(dto.categoryId).exec();
+  async createMenuItem(
+    dto: CreateMenuItemDto,
+    userId = 'system',
+  ): Promise<MenuItem> {
+    const categoryExists = await this.categoryModel
+      .findById(dto.categoryId)
+      .exec();
     if (!categoryExists) {
-      throw new NotFoundException(`Danh mục với ID '${dto.categoryId}' không tồn tại`);
+      throw new NotFoundException(
+        `Danh mục với ID '${dto.categoryId}' không tồn tại`,
+      );
     }
 
     const existingMenuItem = await this.menuItemModel
       .findOne({ name: dto.name.trim() })
       .exec();
     if (existingMenuItem) {
-      throw new BadRequestException(`Món ăn có tên '${dto.name}' đã tồn tại`);
+      throw new ConflictException(`Món ăn có tên '${dto.name}' đã tồn tại`);
     }
 
     const createdMenuItem = new this.menuItemModel({
@@ -128,7 +126,7 @@ export class MenuService implements OnModuleInit {
 
     const savedItem = await createdMenuItem.save();
 
-    // Update Trie index
+    // Cập nhật chỉ mục Trie sau khi tạo món ăn.
     this.menuTrie.insert(savedItem.name, savedItem._id.toString());
 
     await this.menuHistoryManager.pushCommand(userId, {
@@ -142,41 +140,47 @@ export class MenuService implements OnModuleInit {
   }
 
   /**
-   * Cập nhật thông tin món ăn (Lưu trạng thái cũ vào Stack)
+   * Cập nhật món ăn và lưu trạng thái cũ vào ngăn xếp lịch sử.
    */
-  async updateMenuItem(id: string, dto: UpdateMenuItemDto, userId = 'system'): Promise<MenuItem> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('ID món ăn không đúng định dạng ObjectId');
-    }
-
+  async updateMenuItem(
+    id: string,
+    dto: UpdateMenuItemDto,
+    userId = 'system',
+  ): Promise<MenuItem> {
     const menuItem = await this.menuItemModel.findById(id).exec();
     if (!menuItem) {
       throw new NotFoundException(`Món ăn với ID '${id}' không tồn tại`);
     }
 
     if (dto.categoryId) {
-      if (!Types.ObjectId.isValid(dto.categoryId)) {
-        throw new BadRequestException('ID danh mục (categoryId) không đúng định dạng ObjectId');
-      }
-      const categoryExists = await this.categoryModel.findById(dto.categoryId).exec();
+      const categoryExists = await this.categoryModel
+        .findById(dto.categoryId)
+        .exec();
       if (!categoryExists) {
-        throw new NotFoundException(`Danh mục với ID '${dto.categoryId}' không tồn tại`);
+        throw new NotFoundException(
+          `Danh mục với ID '${dto.categoryId}' không tồn tại`,
+        );
       }
     }
 
     if (dto.name) {
       const trimmedName = dto.name.trim();
       if (trimmedName !== menuItem.name) {
-        const existing = await this.menuItemModel.findOne({ name: trimmedName }).exec();
+        const existing = await this.menuItemModel
+          .findOne({ name: trimmedName })
+          .exec();
         if (existing) {
-          throw new BadRequestException(`Món ăn có tên '${trimmedName}' đã tồn tại`);
+          throw new ConflictException(
+            `Món ăn có tên '${trimmedName}' đã tồn tại`,
+          );
         }
       }
     }
 
     const previousData = menuItem.toObject();
 
-    if (dto.categoryId) menuItem.categoryId = new Types.ObjectId(dto.categoryId);
+    if (dto.categoryId)
+      menuItem.categoryId = new Types.ObjectId(dto.categoryId);
     if (dto.name) menuItem.name = dto.name.trim();
     if (dto.description !== undefined) menuItem.description = dto.description;
     if (dto.price !== undefined) menuItem.price = dto.price;
@@ -186,7 +190,7 @@ export class MenuService implements OnModuleInit {
 
     const updatedMenuItem = await menuItem.save();
 
-    // Rebuild Trie on name/availability change
+    // Xây dựng lại Trie khi tên hoặc trạng thái bán có thể đã thay đổi.
     await this.rebuildTrieIndex();
 
     await this.menuHistoryManager.pushCommand(userId, {
@@ -200,13 +204,9 @@ export class MenuService implements OnModuleInit {
   }
 
   /**
-   * Xóa món ăn khỏi menu (Hard delete khỏi DB, lưu trạng thái cũ vào Stack)
+   * Xóa vĩnh viễn món ăn và lưu trạng thái cũ vào ngăn xếp lịch sử.
    */
   async deleteMenuItem(id: string, userId = 'system'): Promise<MenuItem> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('ID món ăn không đúng định dạng ObjectId');
-    }
-
     const menuItem = await this.menuItemModel.findById(id).exec();
     if (!menuItem) {
       throw new NotFoundException(`Món ăn với ID '${id}' không tồn tại`);
@@ -216,7 +216,7 @@ export class MenuService implements OnModuleInit {
 
     await this.menuItemModel.findByIdAndDelete(id).exec();
 
-    // Rebuild Trie index after delete
+    // Xây dựng lại chỉ mục Trie sau khi xóa món ăn.
     await this.rebuildTrieIndex();
 
     await this.menuHistoryManager.pushCommand(userId, {
@@ -230,23 +230,29 @@ export class MenuService implements OnModuleInit {
   }
 
   /**
-   * Hoàn tác (Undo) thao tác sửa đổi vừa thực hiện trên Menu
+   * Hoàn tác thay đổi gần nhất trên thực đơn.
    */
-  async undoMenuItemChange(userId = 'system'): Promise<any> {
+  async undoMenuItemChange(userId = 'system'): Promise<unknown> {
     const command = await this.menuHistoryManager.popUndo(userId);
     if (!command) {
-      throw new BadRequestException('Không có thao tác nào để hoàn tác (Undo Stack rỗng)');
+      throw new BadRequestException(
+        'Không có thao tác nào để hoàn tác (Undo Stack rỗng)',
+      );
     }
 
-    const { type, menuItemId, previousData } = command;
-    let res: any;
+    const { type, menuItemId } = command;
+    const previousData = command.previousData as Record<string, unknown>;
+    let res: unknown;
 
     if (type === 'UPDATE') {
       const menuItem = await this.menuItemModel.findById(menuItemId).exec();
       if (!menuItem) {
         const restoredItem = new this.menuItemModel(previousData);
         await restoredItem.save();
-        res = { message: 'Hoàn tác thành công (Khôi phục món ăn đã bị xóa)', item: restoredItem };
+        res = {
+          message: 'Hoàn tác thành công (Khôi phục món ăn đã bị xóa)',
+          item: restoredItem,
+        };
       } else {
         Object.assign(menuItem, previousData);
         const saved = await menuItem.save();
@@ -254,11 +260,17 @@ export class MenuService implements OnModuleInit {
       }
     } else if (type === 'CREATE') {
       await this.menuItemModel.findByIdAndDelete(menuItemId).exec();
-      res = { message: 'Hoàn tác tạo mới thành công (Đã xóa món ăn)', menuItemId };
+      res = {
+        message: 'Hoàn tác tạo mới thành công (Đã xóa món ăn)',
+        menuItemId,
+      };
     } else if (type === 'DELETE') {
       const restoredItem = new this.menuItemModel(previousData);
       await restoredItem.save();
-      res = { message: 'Hoàn tác xóa thành công (Khôi phục món ăn)', item: restoredItem };
+      res = {
+        message: 'Hoàn tác xóa thành công (Khôi phục món ăn)',
+        item: restoredItem,
+      };
     }
 
     await this.rebuildTrieIndex();
@@ -266,21 +278,26 @@ export class MenuService implements OnModuleInit {
   }
 
   /**
-   * Làm lại (Redo) thao tác vừa hoàn tác trên Menu
+   * Làm lại thay đổi vừa được hoàn tác trên thực đơn.
    */
-  async redoMenuItemChange(userId = 'system'): Promise<any> {
+  async redoMenuItemChange(userId = 'system'): Promise<unknown> {
     const command = await this.menuHistoryManager.popRedo(userId);
     if (!command) {
-      throw new BadRequestException('Không có thao tác nào để làm lại (Redo Stack rỗng)');
+      throw new BadRequestException(
+        'Không có thao tác nào để làm lại (Redo Stack rỗng)',
+      );
     }
 
-    const { type, menuItemId, newData } = command;
-    let res: any;
+    const { type, menuItemId } = command;
+    const newData = command.newData as Record<string, unknown>;
+    let res: unknown;
 
     if (type === 'UPDATE') {
       const menuItem = await this.menuItemModel.findById(menuItemId).exec();
       if (!menuItem) {
-        throw new NotFoundException(`Không tìm thấy món ăn với ID '${menuItemId}' để làm lại cập nhật`);
+        throw new NotFoundException(
+          `Không tìm thấy món ăn với ID '${menuItemId}' để làm lại cập nhật`,
+        );
       }
       Object.assign(menuItem, newData);
       const saved = await menuItem.save();
@@ -291,7 +308,10 @@ export class MenuService implements OnModuleInit {
       res = { message: 'Làm lại tạo mới thành công', item: recreatedItem };
     } else if (type === 'DELETE') {
       await this.menuItemModel.findByIdAndDelete(menuItemId).exec();
-      res = { message: 'Làm lại xóa thành công (Đã xóa lại món ăn)', menuItemId };
+      res = {
+        message: 'Làm lại xóa thành công (Đã xóa lại món ăn)',
+        menuItemId,
+      };
     }
 
     await this.rebuildTrieIndex();

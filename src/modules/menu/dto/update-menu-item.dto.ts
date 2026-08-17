@@ -1,10 +1,19 @@
-import { IsString, IsOptional, IsNumber, Min, IsBoolean, IsArray, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsMongoId,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { MenuItemOptionDto } from './create-menu-item.dto';
 
 export class UpdateMenuItemDto {
   @IsOptional()
-  @IsString({ message: 'Danh mục (categoryId) phải là chuỗi ObjectId' })
+  @IsMongoId({ message: 'ID danh mục không đúng định dạng ObjectId' })
   categoryId?: string;
 
   @IsOptional()
