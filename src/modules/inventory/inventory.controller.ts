@@ -1,6 +1,5 @@
 import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
-import { CreateIngredientDto } from './dto/create-ingredient.dto';
 import { CreateInventoryBatchDto } from './dto/create-inventory-batch.dto';
 import { ConsumeIngredientDto } from './dto/consume-ingredient.dto';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -11,17 +10,6 @@ import { Role } from '../../common/enums/role.enum';
 @UseGuards(RolesGuard)
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
-
-  /**
-   * POST /api/canteen/inventory/ingredients
-   * Khởi tạo nguyên liệu mới.
-   * Quyền hạn: Quản trị viên hoặc quản lý.
-   */
-  @Post('ingredients')
-  @Roles(Role.ADMIN, Role.MANAGER)
-  async createIngredient(@Body() dto: CreateIngredientDto) {
-    return this.inventoryService.createIngredient(dto);
-  }
 
   /**
    * POST /api/canteen/inventory/batches

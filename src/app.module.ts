@@ -14,6 +14,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER } from '@nestjs/core';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { CategoryModule } from './modules/category/category.module';
+import { IngredientModule } from './modules/ingredient/ingredient.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { CategoryModule } from './modules/category/category.module';
     InventoryModule,
     AnalyticsModule,
     CategoryModule,
+    IngredientModule,
   ],
   controllers: [AppController],
   providers: [

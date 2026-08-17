@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsNumber, Min } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
 
 export class CreateIngredientDto {
   @IsNotEmpty({ message: 'Tên nguyên liệu không được để trống' })

@@ -14,7 +14,6 @@ import {
   InventoryBatch,
   InventoryBatchDocument,
 } from '../../schemas/inventory_batches.schema';
-import { CreateIngredientDto } from './dto/create-ingredient.dto';
 import { CreateInventoryBatchDto } from './dto/create-inventory-batch.dto';
 import { ConsumeIngredientDto } from './dto/consume-ingredient.dto';
 import { InventoryMinHeap, InventoryBatchNode } from './utils/min-heap';
@@ -30,29 +29,6 @@ export class InventoryService {
     private readonly batchModel: Model<InventoryBatchDocument>,
     private readonly rabbitMQService: RabbitMQService,
   ) {}
-
-  /**
-   * POST /api/canteen/inventory/ingredients
-   * Khởi tạo nguyên liệu mới.
-   */
-  async createIngredient(dto: CreateIngredientDto): Promise<Ingredient> {
-    const existing = await this.ingredientModel
-      .findOne({ name: dto.name.trim() })
-      .exec();
-    if (existing) {
-      throw new ConflictException(
-        `Nguyên liệu '${dto.name}' đã tồn tại trong hệ thống`,
-      );
-    }
-
-    const newIngredient = new this.ingredientModel({
-      name: dto.name.trim(),
-      unit: dto.unit.trim(),
-      minimumThreshold: dto.minimumThreshold,
-    });
-
-    return await newIngredient.save();
-  }
 
   /**
    * POST /api/canteen/inventory/batches
