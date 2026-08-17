@@ -13,13 +13,20 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     try {
       const host = this.configService.get<string>('Rabbitmq_Host') || 'localhost';
-      const username = this.configService.get<string>('Rabbitmq_Username') || 'guest';
-      const password = this.configService.get<string>('Rabbitmq_Password') || 'guest';
+      const username = this.configService.get<string>('RABBITMQ_USER') ||
+        this.configService.get<string>('Rabbitmq_Username') || 'guest';
+      const password = this.configService.get<string>('RABBITMQ_PASSWORD') ||
+        this.configService.get<string>('Rabbitmq_Password') || 'guest';
+      const port = Number(
+        this.configService.get<string>('RABBITMQ_AMQP_HOST_PORT') ||
+        this.configService.get<string>('Rabbitmq_Port') ||
+        5672,
+      );
 
       this.connection = await amqp.connect({
         protocol: 'amqp',
         hostname: host,
-        port: 5672,
+        port,
         username,
         password,
       });
