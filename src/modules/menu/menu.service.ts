@@ -1,4 +1,11 @@
-import { Injectable, OnModuleInit, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  BadRequestException,
+  NotFoundException,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Category, CategoryDocument } from '../../schemas/categories.schema';
@@ -37,8 +44,17 @@ export class MenuService implements OnModuleInit {
         this.menuTrie.insert(item.name, item._id.toString());
       }
       this.logger.log(`Indexed ${allItems.length} menu items into in-memory Search Trie`);
-    } catch (err: any) {
-      this.logger.error(`Failed to build Menu Search Trie index: ${err.message}`);
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+
+      this.logger.error(
+        `Failed to build Menu Search Trie index: ${error.message}`,
+        error.stack,
+      );
+
+      throw new InternalServerErrorException(
+        'Không thể xây dựng lại chỉ mục tìm kiếm thực đơn',
+      );
     }
   }
 
