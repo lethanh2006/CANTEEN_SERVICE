@@ -25,6 +25,9 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+Kiến trúc request production của service được mô tả tại
+[`docs/request-lifecycle.md`](docs/request-lifecycle.md).
+
 ## Project setup
 
 ```bash
