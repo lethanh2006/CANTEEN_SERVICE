@@ -15,6 +15,7 @@ import { User } from '../../common/decorators/user.decorator';
 import { Role } from '../../common/enums/role.enum';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-object-id.pipe';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
+import { Authenticated } from '../../common/decorators/authenticated.decorator';
 
 @Controller('api/canteen/orders')
 @UseGuards(RolesGuard)
@@ -27,6 +28,7 @@ export class OrderController {
    * Quyền hạn: Người dùng đã đăng nhập.
    */
   @Post()
+  @Authenticated()
   async createOrder(
     @Body() createOrderDto: CreateOrderDto,
     @User() user: AuthenticatedUser,
@@ -40,6 +42,7 @@ export class OrderController {
    * Quyền hạn: Người dùng đã đăng nhập.
    */
   @Get('my-orders')
+  @Authenticated()
   async getMyOrders(@User() user: AuthenticatedUser) {
     return this.orderService.getMyOrders(user);
   }
@@ -50,6 +53,7 @@ export class OrderController {
    * Quyền hạn: Nhân viên hoặc bộ phận bếp.
    */
   @Get(':id')
+  @Authenticated()
   async getOrderById(
     @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
   ) {

@@ -23,9 +23,11 @@ export function parseAuthenticatedUser(
   }
 
   const record = value as Record<string, unknown>;
-  return {
+  const user: AuthenticatedUser = {
     ...(typeof record._id === 'string' ? { _id: record._id } : {}),
     ...(typeof record.id === 'string' ? { id: record.id } : {}),
     ...(typeof record.role === 'string' ? { role: record.role } : {}),
   };
+
+  return user._id || user.id ? user : null;
 }

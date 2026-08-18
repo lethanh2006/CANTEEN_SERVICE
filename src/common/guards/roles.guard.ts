@@ -12,10 +12,15 @@ import {
   parseAuthenticatedUser,
   RequestWithAuthenticatedUser,
 } from '../interfaces/authenticated-user.interface';
+import { GatewaySignatureService } from '../security/gateway-signature.service';
+import { AUTHENTICATED_KEY } from '../decorators/authenticated.decorator';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly gatewaySignatureService: GatewaySignatureService,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
     const request = context
@@ -25,6 +30,13 @@ export class RolesGuard implements CanActivate {
 
     let user: AuthenticatedUser | null = null;
     if (typeof base64Payload === 'string') {
+      this.gatewaySignatureService.assertTrusted({
+        payload: base64Payload,
+        requestId: this.headerValue(request.headers['x-request-id']),
+        signature: this.headerValue(request.headers['x-user-signature']),
+        timestamp: this.headerValue(request.headers['x-user-timestamp']),
+      });
+
       try {
         const jsonString = Buffer.from(base64Payload, 'base64').toString(
           'utf8',
@@ -44,13 +56,21 @@ export class RolesGuard implements CanActivate {
       ROLES_KEY,
       [context.getHandler(), context.getClass()],
     );
+    const requiresAuthentication = this.reflector.getAllAndOverride<boolean>(
+      AUTHENTICATED_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
-    if (!requiredRoles) {
+    if (!requiredRoles && !requiresAuthentication) {
       return true;
     }
 
     if (!user) {
       throw new UnauthorizedException('Yêu cầu thông tin định danh người dùng');
+    }
+
+    if (!requiredRoles) {
+      return true;
     }
 
     const hasRole = requiredRoles.some(
@@ -63,5 +83,11 @@ export class RolesGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  private headerValue(
+    value: string | string[] | undefined,
+  ): string | undefined {
+    return typeof value === 'string' ? value : undefined;
   }
 }
