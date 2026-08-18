@@ -6,10 +6,10 @@ export type MenuItemDocument = MenuItem & Document;
 @Schema({ _id: false })
 export class MenuItemOption {
   @Prop({ required: true })
-  name: string;
+  name!: string;
 
   @Prop({ required: true, default: 0 })
-  price: number;
+  price!: number;
 }
 
 const MenuItemOptionSchema = SchemaFactory.createForClass(MenuItemOption);
@@ -17,25 +17,25 @@ const MenuItemOptionSchema = SchemaFactory.createForClass(MenuItemOption);
 @Schema({ timestamps: true })
 export class MenuItem {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true })
-  categoryId: Types.ObjectId;
+  categoryId!: Types.ObjectId;
 
   @Prop({ required: true, unique: true, trim: true })
-  name: string;
+  name!: string;
 
   @Prop({ required: false })
-  description: string;
+  description!: string;
 
   @Prop({ required: true, min: 0 })
-  price: number;
+  price!: number;
 
   @Prop({ required: false })
-  imageUrl: string;
+  imageUrl!: string;
 
   @Prop({ required: true, default: true })
-  isAvailable: boolean;
+  isAvailable! : boolean;
 
   @Prop({ type: [MenuItemOptionSchema], default: [] })
-  options: MenuItemOption[];
+  options!: MenuItemOption[];
 }
 
 export const MenuItemSchema = SchemaFactory.createForClass(MenuItem);

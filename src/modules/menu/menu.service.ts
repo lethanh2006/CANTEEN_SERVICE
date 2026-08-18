@@ -1,10 +1,8 @@
 import {
   Injectable,
-  OnModuleInit,
   BadRequestException,
   ConflictException,
   NotFoundException,
-  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -13,13 +11,9 @@ import { MenuItem, MenuItemDocument } from '../../schemas/menu_items.schema';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { MenuHistoryManager } from './utils/undo-stack';
-import { MenuSearchTrie } from './utils/menu-trie';
 
 @Injectable()
-export class MenuService implements OnModuleInit {
-  private readonly menuTrie = new MenuSearchTrie();
-  private readonly logger = new Logger(MenuService.name);
-
+export class MenuService {
   constructor(
     @InjectModel(Category.name)
     private readonly categoryModel: Model<CategoryDocument>,
@@ -29,46 +23,20 @@ export class MenuService implements OnModuleInit {
   ) {}
 
   /**
-   * Nạp dữ liệu vào cây Trie trong bộ nhớ khi mô-đun khởi động.
-   */
-  async onModuleInit() {
-    await this.rebuildTrieIndex();
-  }
-
-  /**
-   * Xây dựng lại chỉ mục tìm kiếm Trie từ MongoDB.
-   */
-  async rebuildTrieIndex(): Promise<void> {
-    const allItems = await this.menuItemModel
-      .find({ isAvailable: true })
-      .exec();
-    this.menuTrie.clear();
-    for (const item of allItems) {
-      this.menuTrie.insert(item.name, item._id.toString());
-    }
-    this.logger.log(
-      `Đã lập chỉ mục ${allItems.length} món ăn vào cây Trie trong bộ nhớ`,
-    );
-  }
-
-  /**
    * GET /api/canteen/menu/search?q=...
-   * Tìm kiếm tiền tố theo thời gian thực bằng cây Trie trong bộ nhớ.
+   * Tìm kiếm trực tiếp trong MongoDB để không phải đồng bộ chỉ mục trong RAM.
    */
   async searchMenuItems(query: string): Promise<MenuItem[]> {
-    if (!query || !query.trim()) {
-      return await this.menuItemModel.find({ isAvailable: true }).exec();
+    const keyword = query?.trim();
+    const filter: Record<string, unknown> = { isAvailable: true };
+    if (keyword) {
+      filter.name = {
+        $regex: keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        $options: 'i',
+      };
     }
 
-    const matchedIds = this.menuTrie.searchPrefix(query);
-    if (matchedIds.length === 0) {
-      return [];
-    }
-
-    const objectIds = matchedIds.map((id) => new Types.ObjectId(id));
-    return await this.menuItemModel
-      .find({ _id: { $in: objectIds }, isAvailable: true })
-      .exec();
+    return await this.menuItemModel.find(filter).sort({ name: 1 }).exec();
   }
 
   /**
@@ -125,9 +93,6 @@ export class MenuService implements OnModuleInit {
     });
 
     const savedItem = await createdMenuItem.save();
-
-    // Cập nhật chỉ mục Trie sau khi tạo món ăn.
-    this.menuTrie.insert(savedItem.name, savedItem._id.toString());
 
     await this.menuHistoryManager.pushCommand(userId, {
       type: 'CREATE',
@@ -190,9 +155,6 @@ export class MenuService implements OnModuleInit {
 
     const updatedMenuItem = await menuItem.save();
 
-    // Xây dựng lại Trie khi tên hoặc trạng thái bán có thể đã thay đổi.
-    await this.rebuildTrieIndex();
-
     await this.menuHistoryManager.pushCommand(userId, {
       type: 'UPDATE',
       menuItemId: id,
@@ -215,9 +177,6 @@ export class MenuService implements OnModuleInit {
     const previousData = menuItem.toObject();
 
     await this.menuItemModel.findByIdAndDelete(id).exec();
-
-    // Xây dựng lại chỉ mục Trie sau khi xóa món ăn.
-    await this.rebuildTrieIndex();
 
     await this.menuHistoryManager.pushCommand(userId, {
       type: 'DELETE',
@@ -273,7 +232,6 @@ export class MenuService implements OnModuleInit {
       };
     }
 
-    await this.rebuildTrieIndex();
     return res;
   }
 
@@ -314,7 +272,6 @@ export class MenuService implements OnModuleInit {
       };
     }
 
-    await this.rebuildTrieIndex();
     return res;
   }
 }

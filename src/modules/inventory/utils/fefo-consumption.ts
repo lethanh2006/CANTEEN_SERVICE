@@ -1,4 +1,8 @@
-import { InventoryMinHeap } from './min-heap';
+export interface ConsumableBatch {
+  batchId: string;
+  expiryDate: Date;
+  quantity: number;
+}
 
 export interface BatchConsumptionResult {
   batchId: string;
@@ -20,56 +24,50 @@ export interface InventoryDeductionReport {
 
 /**
  * Tính lượng nguyên liệu cần khấu trừ theo nguyên tắc hết hạn trước, xuất trước
- * (FEFO) bằng cấu trúc Min Heap.
+ * (FEFO). Danh sách đầu vào đã được MongoDB sắp theo hạn sử dụng.
  */
-export class FEFOConsumptionService {
-  /**
-   * Khấu trừ nguyên liệu từ các lô đang hoạt động theo hạn sử dụng tăng dần.
-   */
-  static consumeIngredientBatches(
-    ingredientId: string,
-    requiredAmount: number,
-    minHeap: InventoryMinHeap,
-    minimumThreshold: number,
-  ): InventoryDeductionReport {
-    let remainingNeeded = requiredAmount;
-    const affectedBatches: BatchConsumptionResult[] = [];
+export function calculateFefoConsumption(
+  ingredientId: string,
+  requiredAmount: number,
+  batchesByExpiry: ConsumableBatch[],
+  minimumThreshold: number,
+): InventoryDeductionReport {
+  let remainingNeeded = requiredAmount;
+  const affectedBatches: BatchConsumptionResult[] = [];
 
-    const sortedBatches = minHeap.getSortedBatches();
-    const totalStockBefore = sortedBatches.reduce(
-      (acc, b) => acc + b.quantity,
-      0,
-    );
+  const totalStockBefore = batchesByExpiry.reduce(
+    (acc, batch) => acc + batch.quantity,
+    0,
+  );
 
-    for (const batch of sortedBatches) {
-      if (remainingNeeded <= 0) break;
+  for (const batch of batchesByExpiry) {
+    if (remainingNeeded <= 0) break;
 
-      const deductAmount = Math.min(batch.quantity, remainingNeeded);
-      batch.quantity -= deductAmount;
-      remainingNeeded -= deductAmount;
+    const deductAmount = Math.min(batch.quantity, remainingNeeded);
+    const remainingBatchQuantity = batch.quantity - deductAmount;
+    remainingNeeded -= deductAmount;
 
-      const newStatus = batch.quantity === 0 ? 'DEPLETED' : 'ACTIVE';
+    const newStatus = remainingBatchQuantity === 0 ? 'DEPLETED' : 'ACTIVE';
 
-      affectedBatches.push({
-        batchId: batch.batchId,
-        expiryDate: batch.expiryDate,
-        consumedQuantity: deductAmount,
-        remainingBatchQuantity: batch.quantity,
-        status: newStatus,
-      });
-    }
-
-    const totalConsumed = requiredAmount - remainingNeeded;
-    const remainingTotalStock = Math.max(0, totalStockBefore - totalConsumed);
-
-    return {
-      ingredientId,
-      requestedQuantity: requiredAmount,
-      totalConsumed,
-      isFullyFulfilled: remainingNeeded === 0,
-      affectedBatches,
-      remainingTotalStock,
-      isLowStockAlert: remainingTotalStock <= minimumThreshold,
-    };
+    affectedBatches.push({
+      batchId: batch.batchId,
+      expiryDate: batch.expiryDate,
+      consumedQuantity: deductAmount,
+      remainingBatchQuantity,
+      status: newStatus,
+    });
   }
+
+  const totalConsumed = requiredAmount - remainingNeeded;
+  const remainingTotalStock = Math.max(0, totalStockBefore - totalConsumed);
+
+  return {
+    ingredientId,
+    requestedQuantity: requiredAmount,
+    totalConsumed,
+    isFullyFulfilled: remainingNeeded === 0,
+    affectedBatches,
+    remainingTotalStock,
+    isLowStockAlert: remainingTotalStock <= minimumThreshold,
+  };
 }

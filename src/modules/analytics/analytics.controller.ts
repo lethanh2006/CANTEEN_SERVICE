@@ -11,7 +11,7 @@ export class AnalyticsController {
 
   /**
    * GET /api/canteen/analytics/top-dishes
-   * Trả về K món ăn bán chạy nhất bằng cây Min Heap.
+   * Trả về các món ăn bán chạy nhất.
    * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Get('top-dishes')

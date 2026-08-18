@@ -155,7 +155,7 @@ export class OrderService {
   }
 
   /**
-   * Xác nhận đơn hàng, tính điểm ưu tiên và gửi sự kiện chế biến
+   * Xác nhận đơn hàng, tính điểm ưu tiên và phát sự kiện chế biến.
    * Công thức: điểm = điểm vai trò * 100 + điểm mang đi * 50 + số phút chờ * 1,5.
    */
   async confirmOrder(id: string): Promise<Order> {
@@ -198,7 +198,6 @@ export class OrderService {
 
     const updatedOrder = await order.save();
 
-    // Phát sự kiện xác nhận đơn hàng sang RabbitMQ.
     await this.rabbitMQService.publish('order.confirmed', {
       orderId: updatedOrder._id.toString(),
       orderNumber: updatedOrder.orderNumber,

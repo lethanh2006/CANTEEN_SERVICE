@@ -13,7 +13,7 @@ export class InventoryController {
 
   /**
    * POST /api/canteen/inventory/batches
-   * Nhập lô hàng mới vào Min Heap quản lý hạn sử dụng.
+   * Nhập một lô nguyên liệu mới.
    * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Post('batches')

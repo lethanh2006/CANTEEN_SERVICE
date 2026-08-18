@@ -1,135 +1,46 @@
 import {
   ConflictException,
   Injectable,
-  Logger,
   NotFoundException,
-  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import { Order, OrderDocument } from '../../schemas/orders.schema';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
-import { KitchenPriorityQueue } from './utils/priority_queue';
-import { toError } from '../../common/utils/error.util';
 
 @Injectable()
-export class KitchenService implements OnModuleInit {
-  private readonly priorityQueue = new KitchenPriorityQueue();
-  private readonly logger = new Logger(KitchenService.name);
-
+export class KitchenService {
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     private readonly rabbitMQService: RabbitMQService,
   ) {}
 
   /**
-   * Nạp các đơn CONFIRMED vào hàng đợi ưu tiên khi mô-đun khởi động.
-   */
-  async onModuleInit() {
-    await this.hydrateQueueFromDB();
-  }
-
-  /**
-   * Nạp hàng đợi ưu tiên trong bộ nhớ từ cơ sở dữ liệu.
-   */
-  private async hydrateQueueFromDB(): Promise<void> {
-    try {
-      const confirmedOrders = await this.orderModel
-        .find({ status: 'CONFIRMED' })
-        .sort({ priorityScore: -1 })
-        .exec();
-
-      this.priorityQueue.clear();
-      for (const order of confirmedOrders) {
-        this.priorityQueue.push({
-          orderId: order._id.toString(),
-          orderNumber: order.orderNumber,
-          priorityScore: order.priorityScore || 0,
-          confirmedAt: order.updatedAt ?? order.createdAt,
-          userRole: order.userRole,
-          isTakeaway: !order.tableId,
-        });
-      }
-      this.logger.log(
-        `Đã nạp ${this.priorityQueue.size()} đơn hàng vào hàng đợi ưu tiên của bếp`,
-      );
-    } catch (err: unknown) {
-      const error = toError(err);
-      this.logger.error(
-        `Không thể nạp hàng đợi ưu tiên của bếp: ${error.message}`,
-        error.stack,
-      );
-    }
-  }
-
-  /**
-   * Xử lý sự kiện xác nhận đơn hàng nhận từ RabbitMQ.
-   */
-  handleOrderConfirmedEvent(eventData: OrderConfirmedEvent): void {
-    this.priorityQueue.push({
-      orderId: eventData.orderId,
-      orderNumber: eventData.orderNumber,
-      priorityScore: eventData.priorityScore,
-      confirmedAt: new Date(eventData.confirmedAt),
-      userRole: eventData.userRole,
-      isTakeaway: eventData.isTakeaway,
-    });
-    this.logger.log(
-      `Đã thêm đơn ${eventData.orderNumber} vào hàng đợi của bếp (điểm: ${eventData.priorityScore})`,
-    );
-  }
-
-  /**
    * GET /api/canteen/kitchen/queue
    * Xem các đơn trong hàng đợi theo điểm ưu tiên giảm dần.
    */
   async getQueue(): Promise<Order[]> {
-    if (this.priorityQueue.isEmpty()) {
-      return await this.orderModel
-        .find({ status: 'CONFIRMED' })
-        .sort({ priorityScore: -1, createdAt: 1 })
-        .exec();
-    }
-
-    const orderNodes = this.priorityQueue.toArray();
-    orderNodes.sort((a, b) => b.priorityScore - a.priorityScore);
-
-    const orderIds = orderNodes.map((node) => new Types.ObjectId(node.orderId));
-    const orders = await this.orderModel
-      .find({ _id: { $in: orderIds } })
+    return await this.orderModel
+      .find({ status: 'CONFIRMED' })
+      .sort({ priorityScore: -1, createdAt: 1 })
       .exec();
-
-    const orderMap = new Map(orders.map((o) => [o._id.toString(), o]));
-    const result: Order[] = [];
-    for (const node of orderNodes) {
-      const found = orderMap.get(node.orderId);
-      if (found) {
-        result.push(found);
-      }
-    }
-
-    return result;
   }
 
   /**
    * POST /api/canteen/kitchen/next
-   * Lấy đơn ưu tiên cao nhất khỏi Max Heap và chuyển sang COOKING.
+   * Lấy và nhận xử lý nguyên tử đơn có độ ưu tiên cao nhất.
    */
   async getNextOrder(): Promise<Order> {
-    const nextNode = this.priorityQueue.pop();
-
-    let nextOrder: OrderDocument | null = null;
-
-    if (nextNode) {
-      nextOrder = await this.orderModel.findById(nextNode.orderId).exec();
-    }
-
-    if (!nextOrder || nextOrder.status !== 'CONFIRMED') {
-      nextOrder = await this.orderModel
-        .findOne({ status: 'CONFIRMED' })
-        .sort({ priorityScore: -1, createdAt: 1 })
-        .exec();
-    }
+    const nextOrder = await this.orderModel
+      .findOneAndUpdate(
+        { status: 'CONFIRMED' },
+        { $set: { status: 'COOKING' } },
+        {
+          new: true,
+          sort: { priorityScore: -1, createdAt: 1 },
+        },
+      )
+      .exec();
 
     if (!nextOrder) {
       throw new NotFoundException(
@@ -137,8 +48,7 @@ export class KitchenService implements OnModuleInit {
       );
     }
 
-    nextOrder.status = 'COOKING';
-    return await nextOrder.save();
+    return nextOrder;
   }
 
   /**
@@ -197,13 +107,4 @@ export class KitchenService implements OnModuleInit {
 
     return updatedOrder;
   }
-}
-
-export interface OrderConfirmedEvent {
-  orderId: string;
-  orderNumber: string;
-  priorityScore: number;
-  confirmedAt: Date;
-  userRole?: string;
-  isTakeaway?: boolean;
 }

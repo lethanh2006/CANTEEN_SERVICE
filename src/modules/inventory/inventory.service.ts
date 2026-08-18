@@ -16,9 +16,24 @@ import {
 } from '../../schemas/inventory_batches.schema';
 import { CreateInventoryBatchDto } from './dto/create-inventory-batch.dto';
 import { ConsumeIngredientDto } from './dto/consume-ingredient.dto';
-import { InventoryMinHeap, InventoryBatchNode } from './utils/min-heap';
-import { FEFOConsumptionService } from './utils/fefo-consumption';
+import {
+  calculateFefoConsumption,
+  ConsumableBatch,
+} from './utils/fefo-consumption';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
+
+export interface InventoryBatchSummary {
+  batchId: string;
+  ingredientId: string;
+  ingredientName: string;
+  unit: string;
+  expiryDate: Date;
+  quantity: number;
+  originalQuantity: number;
+  costPrice: number;
+  supplier: string;
+  status: string;
+}
 
 @Injectable()
 export class InventoryService {
@@ -32,7 +47,7 @@ export class InventoryService {
 
   /**
    * POST /api/canteen/inventory/batches
-   * Nhập lô hàng mới vào Min Heap quản lý hạn sử dụng.
+   * Nhập một lô nguyên liệu mới.
    */
   async createBatch(dto: CreateInventoryBatchDto): Promise<InventoryBatch> {
     const ingredient = await this.ingredientModel
@@ -67,17 +82,16 @@ export class InventoryService {
    * GET /api/canteen/inventory/expiry-alerts
    * Lấy danh sách lô nguyên liệu theo thứ tự hết hạn sớm nhất.
    */
-  async getExpiryAlerts(): Promise<InventoryBatchNode[]> {
+  async getExpiryAlerts(): Promise<InventoryBatchSummary[]> {
     const batches = await this.batchModel
       .find({ status: 'ACTIVE', quantity: { $gt: 0 } })
+      .sort({ expiryDate: 1 })
       .populate<{ ingredientId: IngredientDocument }>('ingredientId')
       .exec();
 
-    const minHeap = new InventoryMinHeap();
-
-    for (const batch of batches) {
+    return batches.map((batch) => {
       const ing = batch.ingredientId;
-      minHeap.push({
+      return {
         batchId: batch._id.toString(),
         ingredientId: ing._id.toString(),
         ingredientName: ing.name,
@@ -88,10 +102,8 @@ export class InventoryService {
         costPrice: batch.costPrice,
         supplier: batch.supplier,
         status: batch.status,
-      });
-    }
-
-    return minHeap.getSortedBatches();
+      };
+    });
   }
 
   /**
@@ -118,26 +130,16 @@ export class InventoryService {
       .sort({ expiryDate: 1 })
       .exec();
 
-    const minHeap = new InventoryMinHeap();
-    for (const batch of activeBatches) {
-      minHeap.push({
-        batchId: batch._id.toString(),
-        ingredientId: ingredient._id.toString(),
-        ingredientName: ingredient.name,
-        unit: ingredient.unit,
-        expiryDate: batch.expiryDate,
-        quantity: batch.quantity,
-        originalQuantity: batch.originalQuantity,
-        costPrice: batch.costPrice,
-        supplier: batch.supplier,
-        status: batch.status,
-      });
-    }
+    const batchesByExpiry: ConsumableBatch[] = activeBatches.map((batch) => ({
+      batchId: batch._id.toString(),
+      expiryDate: batch.expiryDate,
+      quantity: batch.quantity,
+    }));
 
-    const report = FEFOConsumptionService.consumeIngredientBatches(
+    const report = calculateFefoConsumption(
       ingredient._id.toString(),
       dto.quantity,
-      minHeap,
+      batchesByExpiry,
       ingredient.minimumThreshold,
     );
 

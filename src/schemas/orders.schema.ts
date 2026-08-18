@@ -109,3 +109,5 @@ export class Order {
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
+
+OrderSchema.index({ status: 1, priorityScore: -1, createdAt: 1 });

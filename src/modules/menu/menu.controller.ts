@@ -36,7 +36,7 @@ export class MenuController {
 
   /**
    * GET /api/canteen/menu/search?q=...
-   * Tìm kiếm món ăn theo thời gian thực bằng cây tiền tố Trie.
+   * Tìm kiếm món ăn đang bán theo tên.
    * Quyền hạn: Công khai.
    */
   @Get('menu/search')
