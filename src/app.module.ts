@@ -14,6 +14,7 @@ import { ConfigModule } from '@nestjs/config';
 import { CategoryModule } from './modules/category/category.module';
 import { IngredientModule } from './modules/ingredient/ingredient.module';
 import { CoreModule } from './core/core.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { CoreModule } from './core/core.module';
     AnalyticsModule,
     CategoryModule,
     IngredientModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

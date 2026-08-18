@@ -71,6 +71,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client;
   }
 
+  isReady(): boolean {
+    return this.client?.isReady === true;
+  }
+
   // Các thao tác Redis List phục vụ ngăn xếp hoàn tác và làm lại.
   async rPush(key: string, value: string): Promise<number> {
     return this.client.rPush(key, value);

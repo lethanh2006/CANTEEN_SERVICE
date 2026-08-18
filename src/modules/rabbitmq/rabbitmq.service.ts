@@ -16,6 +16,10 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
 
   constructor(private readonly configService: ConfigService) {}
 
+  isReady(): boolean {
+    return this.connection !== null && this.channel !== null;
+  }
+
   async onModuleInit() {
     try {
       const host =
