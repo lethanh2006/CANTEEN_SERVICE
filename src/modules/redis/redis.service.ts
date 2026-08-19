@@ -11,7 +11,7 @@ import { toError } from '../../common/utils/error.util';
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
-  private client: RedisClientType;
+  private client!: RedisClientType;
 
   constructor(private readonly configService: ConfigService) {}
 

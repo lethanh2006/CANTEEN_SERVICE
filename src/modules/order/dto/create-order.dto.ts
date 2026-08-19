@@ -14,23 +14,23 @@ import { Type } from 'class-transformer';
 export class OrderSelectedOptionDto {
   @IsNotEmpty({ message: 'Tên tùy chọn không được để trống' })
   @IsString({ message: 'Tên tùy chọn phải là chuỗi ký tự' })
-  name: string;
+  name!: string;
 
   @IsNotEmpty({ message: 'Giá tùy chọn không được để trống' })
   @IsNumber({}, { message: 'Giá tùy chọn phải là số' })
   @Min(0, { message: 'Giá tùy chọn phải lớn hơn hoặc bằng 0' })
-  price: number;
+  price!: number;
 }
 
 export class CreateOrderItemDto {
   @IsNotEmpty({ message: 'ID món ăn (menuItemId) không được để trống' })
   @IsMongoId({ message: 'ID món ăn không đúng định dạng ObjectId' })
-  menuItemId: string;
+  menuItemId!: string;
 
   @IsNotEmpty({ message: 'Số lượng không được để trống' })
   @IsNumber({}, { message: 'Số lượng phải là số' })
   @Min(1, { message: 'Số lượng phải lớn hơn hoặc bằng 1' })
-  quantity: number;
+  quantity!: number;
 
   @IsOptional()
   @IsArray({ message: 'Danh sách tùy chọn phải là mảng' })
@@ -52,7 +52,7 @@ export class CreateOrderDto {
   @IsArray({ message: 'Danh sách món ăn phải là mảng' })
   @ValidateNested({ each: true })
   @Type(() => CreateOrderItemDto)
-  items: CreateOrderItemDto[];
+  items!: CreateOrderItemDto[];
 
   @IsOptional()
   @IsEnum(['CASH', 'VNPAY', 'MOMO', 'VIETQR'], {

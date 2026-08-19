@@ -39,12 +39,10 @@ export abstract class BaseCrudController<
       TCreateDto,
       TUpdateDto
     >,
-  ) {}
+  ) { }
 }
 
-/**
- * Tạo đủ 5 endpoint CRUD. Controller cụ thể chỉ cần extends class được trả về.
- */
+
 export function createCrudController<
   TDocument extends Document,
   TCreateDto extends object,

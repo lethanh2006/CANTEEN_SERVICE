@@ -12,16 +12,21 @@ import { StructuredLoggerService } from '../observability/structured-logger.serv
 
 @Injectable()
 export class HttpLoggingInterceptor implements NestInterceptor {
-  constructor(private readonly logger: StructuredLoggerService) {}
+  constructor(private readonly logger: StructuredLoggerService) { }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    if (context.getType() !== 'http') {
-      return next.handle();
-    }
+    if (context.getType() !== 'http') return next.handle();
 
     const http = context.switchToHttp();
     const request = http.getRequest<RequestWithContext>();
     const response = http.getResponse<Response>();
+
+    this.logger.info('http_request_received', {
+      requestId: request.requestContext?.requestId,
+      userId: request.user?._id ?? request.user?.id,
+      method: request.method,
+      path: request.originalUrl ?? request.url,
+    });
 
     return next.handle().pipe(
       tap(() => {
@@ -39,4 +44,5 @@ export class HttpLoggingInterceptor implements NestInterceptor {
       }),
     );
   }
+
 }

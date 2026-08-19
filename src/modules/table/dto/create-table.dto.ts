@@ -9,11 +9,11 @@ import {
 export class CreateTableDto {
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @IsNumber()
   @Min(1)
-  capacity: number;
+  capacity!: number;
 
   @IsString()
   @IsOptional()

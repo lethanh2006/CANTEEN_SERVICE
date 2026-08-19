@@ -6,13 +6,13 @@ export type IngredientDocument = Ingredient & Document;
 @Schema({ timestamps: true })
 export class Ingredient {
     @Prop({ required: true, unique: true, trim: true })
-    name: string;
+    name!: string;
 
     @Prop({ required: true })
-    unit: string;
+    unit!: string;
 
     @Prop({ required: true })
-    minimumThreshold: number;
+    minimumThreshold!: number;
 
 }
 
