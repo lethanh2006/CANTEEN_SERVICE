@@ -56,8 +56,9 @@ export class OrderController {
   @Authenticated()
   async getOrderById(
     @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
+    @User() user: AuthenticatedUser,
   ) {
-    return this.orderService.getOrderById(id);
+    return this.orderService.getOrderById(id, user);
   }
 
   /**

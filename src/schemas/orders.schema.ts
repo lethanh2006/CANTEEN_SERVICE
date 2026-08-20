@@ -106,6 +106,15 @@ export class Order {
     default: 'CASH',
   })
   paymentMethod: string;
+
+  @Prop({ required: false })
+  paymentId?: string;
+
+  @Prop({ required: false })
+  providerTransactionId?: string;
+
+  @Prop({ required: false })
+  paidAt?: Date;
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);

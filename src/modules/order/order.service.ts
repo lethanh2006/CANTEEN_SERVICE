@@ -16,6 +16,7 @@ import {
 } from './utils/discount-calculator';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
+import { Table, TableDocument } from '../../schemas/tables.schema';
 
 @Injectable()
 export class OrderService {
@@ -23,6 +24,8 @@ export class OrderService {
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     @InjectModel(MenuItem.name)
     private readonly menuItemModel: Model<MenuItemDocument>,
+    @InjectModel(Table.name)
+    private readonly tableModel: Model<TableDocument>,
     private readonly rabbitMQService: RabbitMQService,
   ) {}
 
@@ -145,10 +148,27 @@ export class OrderService {
   /**
    * Lấy thông tin chi tiết của một đơn hàng
    */
-  async getOrderById(id: string): Promise<Order> {
+  async getOrderById(id: string, user?: AuthenticatedUser): Promise<Order> {
     const order = await this.orderModel.findById(id).exec();
     if (!order) {
       throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
+    }
+
+    if (user) {
+      const requesterId = user._id ?? user.id;
+      const privilegedRoles = new Set([
+        'admin',
+        'manager',
+        'cashier',
+        'waiter',
+        'chef',
+      ]);
+      if (
+        order.userId.toString() !== requesterId &&
+        !privilegedRoles.has(user.role?.toLowerCase() ?? '')
+      ) {
+        throw new UnauthorizedException('Bạn không có quyền xem đơn hàng này');
+      }
     }
 
     return order;
@@ -232,6 +252,13 @@ export class OrderService {
       order.paymentStatus = 'PAID';
     }
 
-    return await order.save();
+    const updatedOrder = await order.save();
+    if (updatedOrder.paymentStatus === 'PAID' && updatedOrder.tableId) {
+      await this.tableModel
+        .updateOne({ _id: updatedOrder.tableId }, { $set: { status: 'empty' } })
+        .exec();
+    }
+
+    return updatedOrder;
   }
 }
