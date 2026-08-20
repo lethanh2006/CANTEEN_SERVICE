@@ -3,8 +3,8 @@ import { randomUUID } from 'crypto';
 import type { NextFunction, Response } from 'express';
 import type { RequestWithContext } from '../interfaces/request-context.interface';
 
-const REQUEST_ID_HEADER = 'x-request-id';
-const SAFE_REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+export const REQUEST_ID_HEADER = 'x-request-id';
+export const SAFE_REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 @Injectable()
 export class RequestIdMiddleware implements NestMiddleware {
