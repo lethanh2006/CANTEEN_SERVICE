@@ -68,18 +68,14 @@ export class OrderService {
         );
       }
 
-      let optionsTotalPrice = 0;
-      const selectedOptions: Array<{ name: string; price: number }> = [];
-
-      if (itemDto.selectedOptions && itemDto.selectedOptions.length > 0) {
-        for (const opt of itemDto.selectedOptions) {
-          optionsTotalPrice += opt.price || 0;
-          selectedOptions.push({
-            name: opt.name,
-            price: opt.price || 0,
-          });
-        }
-      }
+      const selectedOptions = this.resolveSelectedOptions(
+        menuItem,
+        itemDto.selectedOptions,
+      );
+      const optionsTotalPrice = selectedOptions.reduce(
+        (total, option) => total + option.price,
+        0,
+      );
 
       const unitPrice = menuItem.price;
       itemPriceInfos.push({
@@ -126,6 +122,61 @@ export class OrderService {
     });
 
     return await newOrder.save();
+  }
+
+  /**
+   * Giá option luôn được lấy từ MenuItem trong MongoDB. Trường `price` mà
+   * client cũ gửi lên chỉ được giữ để tương thích DTO và không tham gia tính
+   * tiền.
+   */
+  private resolveSelectedOptions(
+    menuItem: MenuItemDocument,
+    requestedOptions: Array<{ name: string }> | undefined,
+  ): Array<{ name: string; price: number }> {
+    if (!requestedOptions?.length) {
+      return [];
+    }
+
+    const availableOptions = new Map(
+      (menuItem.options ?? []).map((option) => [
+        this.normalizeOptionName(option.name),
+        option,
+      ]),
+    );
+    const selectedNames = new Set<string>();
+
+    return requestedOptions.map((requested) => {
+      const normalizedName = this.normalizeOptionName(requested.name);
+      const authoritative = availableOptions.get(normalizedName);
+      if (!authoritative) {
+        throw new BadRequestException(
+          `Tùy chọn '${requested.name}' không tồn tại trong món '${menuItem.name}'`,
+        );
+      }
+      if (selectedNames.has(normalizedName)) {
+        throw new BadRequestException(
+          `Tùy chọn '${requested.name}' bị chọn trùng trong món '${menuItem.name}'`,
+        );
+      }
+      if (
+        !Number.isSafeInteger(authoritative.price) ||
+        authoritative.price < 0
+      ) {
+        throw new ConflictException(
+          `Giá tùy chọn '${authoritative.name}' của món '${menuItem.name}' không hợp lệ`,
+        );
+      }
+
+      selectedNames.add(normalizedName);
+      return {
+        name: authoritative.name,
+        price: authoritative.price,
+      };
+    });
+  }
+
+  private normalizeOptionName(name: string): string {
+    return name.trim().normalize('NFKC').toLocaleLowerCase('vi-VN');
   }
 
   /**
