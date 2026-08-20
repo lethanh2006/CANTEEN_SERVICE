@@ -13,7 +13,7 @@ type MessageHandler = (content: unknown) => Promise<void> | void;
 @Injectable()
 export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private connection: amqp.ChannelModel | null = null;
-  private channel: amqp.Channel | null = null;
+  private channel: amqp.ConfirmChannel | null = null;
   private readonly logger = new Logger(RabbitMQService.name);
   private readonly subscriptions = new Map<string, MessageHandler>();
   private reconnectTimer: NodeJS.Timeout | null = null;
@@ -46,6 +46,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
         Buffer.from(JSON.stringify(message)),
         { persistent: true, contentType: 'application/json' },
       );
+      await this.channel.waitForConfirms();
       this.logger.log(`Đã phát thông điệp tới hàng đợi '${queueName}'`);
     } catch (error: unknown) {
       const typedError = toError(error);
@@ -110,7 +111,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       username,
       password,
     });
-    const channel = await connection.createChannel();
+    const channel = await connection.createConfirmChannel();
     await channel.prefetch(10);
     connection.on('error', (error) => {
       this.logger.warn(`RabbitMQ lỗi: ${toError(error).message}`);
@@ -182,7 +183,35 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       const correlationId = optionalText(properties.correlationId);
 
       if (nextRetry <= 5) {
-        channel.sendToQueue(queueName, message.content, {
+        try {
+          channel.sendToQueue(queueName, message.content, {
+            persistent: true,
+            contentType,
+            messageId,
+            correlationId,
+            headers: {
+              ...headers,
+              'x-retry-count': nextRetry,
+            },
+          });
+          await channel.waitForConfirms();
+          channel.ack(message);
+          this.logger.warn(
+            `Xử lý '${queueName}' lỗi, đưa lại hàng đợi lần ${nextRetry}: ${typedError.message}`,
+          );
+        } catch (republishError: unknown) {
+          this.requeueOriginal(
+            channel,
+            message,
+            queueName,
+            toError(republishError),
+          );
+        }
+        return;
+      }
+
+      try {
+        channel.sendToQueue(`${queueName}.dlq`, message.content, {
           persistent: true,
           contentType,
           messageId,
@@ -190,30 +219,43 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
           headers: {
             ...headers,
             'x-retry-count': nextRetry,
+            'x-last-error': typedError.message.slice(0, 200),
           },
         });
+        await channel.waitForConfirms();
         channel.ack(message);
-        this.logger.warn(
-          `Xử lý '${queueName}' lỗi, đưa lại hàng đợi lần ${nextRetry}: ${typedError.message}`,
+        this.logger.error(
+          `Đã chuyển thông điệp '${queueName}' vào DLQ: ${typedError.message}`,
+          typedError.stack,
         );
-        return;
+      } catch (republishError: unknown) {
+        this.requeueOriginal(
+          channel,
+          message,
+          `${queueName}.dlq`,
+          toError(republishError),
+        );
       }
+    }
+  }
 
-      channel.sendToQueue(`${queueName}.dlq`, message.content, {
-        persistent: true,
-        contentType,
-        messageId,
-        correlationId,
-        headers: {
-          ...headers,
-          'x-retry-count': nextRetry,
-          'x-last-error': typedError.message.slice(0, 200),
-        },
-      });
-      channel.ack(message);
-      this.logger.error(
-        `Đã chuyển thông điệp '${queueName}' vào DLQ: ${typedError.message}`,
-        typedError.stack,
+  private requeueOriginal(
+    channel: amqp.ConfirmChannel,
+    message: amqp.ConsumeMessage,
+    destination: string,
+    publishError: Error,
+  ): void {
+    this.logger.error(
+      `RabbitMQ chưa xác nhận thông điệp tới '${destination}', giữ bản gốc để xử lý lại: ${publishError.message}`,
+      publishError.stack,
+    );
+    try {
+      channel.nack(message, false, true);
+    } catch (nackError: unknown) {
+      // Nếu channel đã đóng, message chưa được ack sẽ tự quay lại queue khi
+      // connection đóng; vẫn ghi log để vận hành nhận biết lần retry này.
+      this.logger.warn(
+        `Không thể nack thông điệp gốc: ${toError(nackError).message}`,
       );
     }
   }
