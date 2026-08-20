@@ -16,7 +16,7 @@ import {
 } from './utils/discount-calculator';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
-import { Table, TableDocument } from '../../schemas/tables.schema';
+import { OrderSettlementService } from './order-settlement.service';
 
 @Injectable()
 export class OrderService {
@@ -24,8 +24,7 @@ export class OrderService {
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     @InjectModel(MenuItem.name)
     private readonly menuItemModel: Model<MenuItemDocument>,
-    @InjectModel(Table.name)
-    private readonly tableModel: Model<TableDocument>,
+    private readonly orderSettlementService: OrderSettlementService,
     private readonly rabbitMQService: RabbitMQService,
   ) {}
 
@@ -291,7 +290,8 @@ export class OrderService {
     }
 
     if (order.status === 'COMPLETED') {
-      throw new ConflictException('Đơn hàng đã được hoàn thành trước đó');
+      await this.orderSettlementService.reconcileTableForOrder(order._id);
+      return order;
     }
 
     if (order.status === 'CANCELLED') {
@@ -304,11 +304,7 @@ export class OrderService {
     }
 
     const updatedOrder = await order.save();
-    if (updatedOrder.paymentStatus === 'PAID' && updatedOrder.tableId) {
-      await this.tableModel
-        .updateOne({ _id: updatedOrder.tableId }, { $set: { status: 'empty' } })
-        .exec();
-    }
+    await this.orderSettlementService.reconcileTableForOrder(updatedOrder._id);
 
     return updatedOrder;
   }

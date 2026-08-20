@@ -7,8 +7,8 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Order, OrderDocument } from '../../../schemas/orders.schema';
-import { Table, TableDocument } from '../../../schemas/tables.schema';
 import { RabbitMQService } from '../../rabbitmq/rabbitmq.service';
+import { OrderSettlementService } from '../order-settlement.service';
 
 interface PaymentSucceededEvent {
   eventId: string;
@@ -34,8 +34,7 @@ export class PaymentConsumer implements OnModuleInit {
   constructor(
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
-    @InjectModel(Table.name)
-    private readonly tableModel: Model<TableDocument>,
+    private readonly orderSettlementService: OrderSettlementService,
     private readonly rabbitMQService: RabbitMQService,
   ) {}
 
@@ -85,13 +84,9 @@ export class PaymentConsumer implements OnModuleInit {
       );
     }
 
-    // Thanh toán trước không đồng nghĩa bàn đã trống. Chỉ giải phóng bàn khi
-    // vòng đời phục vụ món đã COMPLETED; nhánh này cũng chạy lại khi event lặp.
-    if (order.status === 'COMPLETED' && order.tableId) {
-      await this.tableModel
-        .updateOne({ _id: order.tableId }, { $set: { status: 'empty' } })
-        .exec();
-    }
+    // Luôn đọc lại trạng thái trong MongoDB để tránh race giữa event thanh toán
+    // và thao tác hoàn tất đơn, đồng thời cho phép event lặp tự sửa bàn bị kẹt.
+    await this.orderSettlementService.reconcileTableForOrder(order._id);
   }
 
   private validateEvent(event: PaymentSucceededEvent): void {

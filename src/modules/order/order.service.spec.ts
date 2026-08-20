@@ -42,18 +42,62 @@ function createHarness() {
       exec: jest.fn().mockResolvedValue(menuItem),
     }),
   };
-  const tableModel = {};
+  const orderSettlementService = {
+    reconcileTableForOrder: jest.fn().mockResolvedValue(undefined),
+  };
   const rabbitMQService = {};
 
   return {
     service: new OrderService(
       orderModel as never,
       menuItemModel as never,
-      tableModel as never,
+      orderSettlementService as never,
       rabbitMQService as never,
     ),
     orderModel,
     createdOrders,
+    orderSettlementService,
+  };
+}
+
+interface TestCompletionOrder {
+  _id: Types.ObjectId;
+  status: string;
+  paymentStatus: string;
+  paymentMethod: string;
+  tableId: Types.ObjectId;
+  save: jest.Mock<Promise<TestCompletionOrder>, []>;
+}
+
+function createCompletionHarness(overrides: Partial<TestCompletionOrder> = {}) {
+  const order = {
+    _id: new Types.ObjectId(),
+    status: 'READY',
+    paymentStatus: 'PENDING',
+    paymentMethod: 'VIETQR',
+    tableId: new Types.ObjectId(),
+    ...overrides,
+  } as TestCompletionOrder;
+  order.save = jest.fn(() => Promise.resolve(order));
+
+  const orderModel = {
+    findById: jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue(order),
+    }),
+  };
+  const orderSettlementService = {
+    reconcileTableForOrder: jest.fn().mockResolvedValue(undefined),
+  };
+
+  return {
+    service: new OrderService(
+      orderModel as never,
+      {} as never,
+      orderSettlementService as never,
+      {} as never,
+    ),
+    order,
+    orderSettlementService,
   };
 }
 
@@ -106,5 +150,40 @@ describe('OrderService - giá authoritative', () => {
     ).rejects.toThrow(BadRequestException);
 
     expect(harness.orderModel).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrderService - hoàn tất đơn', () => {
+  it('đọc lại trạng thái settlement sau khi lưu COMPLETED', async () => {
+    const harness = createCompletionHarness();
+
+    await harness.service.completeOrder(harness.order._id.toHexString());
+
+    expect(harness.order.status).toBe('COMPLETED');
+    expect(harness.order.save).toHaveBeenCalledTimes(1);
+    expect(
+      harness.orderSettlementService.reconcileTableForOrder,
+    ).toHaveBeenCalledWith(harness.order._id);
+    expect(harness.order.save.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.orderSettlementService.reconcileTableForOrder.mock
+        .invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER,
+    );
+  });
+
+  it('complete lặp lại vẫn reconcile để sửa bàn bị kẹt', async () => {
+    const harness = createCompletionHarness({
+      status: 'COMPLETED',
+      paymentStatus: 'PAID',
+    });
+
+    const result = await harness.service.completeOrder(
+      harness.order._id.toHexString(),
+    );
+
+    expect(result).toBe(harness.order);
+    expect(harness.order.save).not.toHaveBeenCalled();
+    expect(
+      harness.orderSettlementService.reconcileTableForOrder,
+    ).toHaveBeenCalledWith(harness.order._id);
   });
 });

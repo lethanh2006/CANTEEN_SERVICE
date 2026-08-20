@@ -79,14 +79,13 @@ function createConsumer(order: TestOrder) {
   const orderModel = {
     findById: jest.fn().mockReturnValue({ exec: findByIdExec }),
   };
-  const tableUpdateExec = jest.fn().mockResolvedValue({ modifiedCount: 1 });
-  const tableModel = {
-    updateOne: jest.fn().mockReturnValue({ exec: tableUpdateExec }),
+  const orderSettlementService = {
+    reconcileTableForOrder: jest.fn().mockResolvedValue(undefined),
   };
   const rabbitMQService = { subscribe: jest.fn() };
   const consumer = new PaymentConsumer(
     orderModel as never,
-    tableModel as never,
+    orderSettlementService as never,
     rabbitMQService as never,
   );
 
@@ -95,15 +94,15 @@ function createConsumer(order: TestOrder) {
       handle(event: TestPaymentSucceededEvent): Promise<void>;
     },
     orderModel,
-    tableModel,
-    tableUpdateExec,
+    orderSettlementService,
   };
 }
 
 describe('PaymentConsumer', () => {
   it('marks the payment as paid without completing the order or releasing its table', async () => {
     const order = createOrder();
-    const { consumer, orderModel, tableModel } = createConsumer(order);
+    const { consumer, orderModel, orderSettlementService } =
+      createConsumer(order);
 
     await consumer.handle(createEvent());
 
@@ -114,12 +113,14 @@ describe('PaymentConsumer', () => {
     expect(order.paidAt).toEqual(new Date('2026-08-20T08:00:00.000Z'));
     expect(order.status).toBe('COOKING');
     expect(order.save).toHaveBeenCalledTimes(1);
-    expect(tableModel.updateOne).not.toHaveBeenCalled();
+    expect(orderSettlementService.reconcileTableForOrder).toHaveBeenCalledWith(
+      orderId,
+    );
   });
 
   it('rejects an amount mismatch without changing the order or table', async () => {
     const order = createOrder();
-    const { consumer, tableModel } = createConsumer(order);
+    const { consumer, orderSettlementService } = createConsumer(order);
 
     await expect(
       consumer.handle(createEvent({ amount: order.finalAmount + 1 })),
@@ -127,7 +128,9 @@ describe('PaymentConsumer', () => {
 
     expect(order.paymentStatus).toBe('PENDING');
     expect(order.save).not.toHaveBeenCalled();
-    expect(tableModel.updateOne).not.toHaveBeenCalled();
+    expect(
+      orderSettlementService.reconcileTableForOrder,
+    ).not.toHaveBeenCalled();
   });
 
   it('ignores a duplicate payment event for an active order', async () => {
@@ -138,29 +141,29 @@ describe('PaymentConsumer', () => {
       providerTransactionId: 'casso-transaction-1',
       paidAt,
     });
-    const { consumer, tableModel } = createConsumer(order);
+    const { consumer, orderSettlementService } = createConsumer(order);
 
     await consumer.handle(createEvent());
 
     expect(order.save).not.toHaveBeenCalled();
     expect(order.paidAt).toBe(paidAt);
-    expect(tableModel.updateOne).not.toHaveBeenCalled();
+    expect(orderSettlementService.reconcileTableForOrder).toHaveBeenCalledWith(
+      orderId,
+    );
   });
 
   it('releases the table only after a newly paid order is completed', async () => {
     const order = createOrder({ status: 'COMPLETED' });
-    const { consumer, tableModel, tableUpdateExec } = createConsumer(order);
+    const { consumer, orderSettlementService } = createConsumer(order);
 
     await consumer.handle(createEvent());
 
     expect(order.paymentStatus).toBe('PAID');
     expect(order.status).toBe('COMPLETED');
     expect(order.save).toHaveBeenCalledTimes(1);
-    expect(tableModel.updateOne).toHaveBeenCalledWith(
-      { _id: tableId },
-      { $set: { status: 'empty' } },
+    expect(orderSettlementService.reconcileTableForOrder).toHaveBeenCalledWith(
+      orderId,
     );
-    expect(tableUpdateExec).toHaveBeenCalledTimes(1);
   });
 
   it('reconciles the table for a duplicate event when the order is completed', async () => {
@@ -171,11 +174,13 @@ describe('PaymentConsumer', () => {
       providerTransactionId: 'casso-transaction-1',
       paidAt: new Date('2026-08-20T08:00:00.000Z'),
     });
-    const { consumer, tableModel } = createConsumer(order);
+    const { consumer, orderSettlementService } = createConsumer(order);
 
     await consumer.handle(createEvent());
 
     expect(order.save).not.toHaveBeenCalled();
-    expect(tableModel.updateOne).toHaveBeenCalledTimes(1);
+    expect(orderSettlementService.reconcileTableForOrder).toHaveBeenCalledWith(
+      orderId,
+    );
   });
 });

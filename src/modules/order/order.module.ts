@@ -6,6 +6,7 @@ import { OrderController } from './order.controller';
 import { OrderService } from './order.service';
 import { Table, TableSchema } from '../../schemas/tables.schema';
 import { PaymentConsumer } from './consumers/payment.consumer';
+import { OrderSettlementService } from './order-settlement.service';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { PaymentConsumer } from './consumers/payment.consumer';
     ]),
   ],
   controllers: [OrderController],
-  providers: [OrderService, PaymentConsumer],
+  providers: [OrderService, OrderSettlementService, PaymentConsumer],
   exports: [OrderService],
 })
 export class OrderModule {}
