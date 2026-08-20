@@ -12,7 +12,7 @@ import { StructuredLoggerService } from '../observability/structured-logger.serv
 
 @Injectable()
 export class HttpLoggingInterceptor implements NestInterceptor {
-  constructor(private readonly logger: StructuredLoggerService) { }
+  constructor(private readonly logger: StructuredLoggerService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     if (context.getType() !== 'http') return next.handle();
@@ -44,5 +44,4 @@ export class HttpLoggingInterceptor implements NestInterceptor {
       }),
     );
   }
-
 }

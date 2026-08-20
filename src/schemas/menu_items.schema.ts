@@ -16,7 +16,11 @@ const MenuItemOptionSchema = SchemaFactory.createForClass(MenuItemOption);
 
 @Schema({ timestamps: true })
 export class MenuItem {
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true })
+  @Prop({
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    required: true,
+  })
   categoryId!: Types.ObjectId;
 
   @Prop({ required: true, unique: true, trim: true })
@@ -32,7 +36,7 @@ export class MenuItem {
   imageUrl!: string;
 
   @Prop({ required: true, default: true })
-  isAvailable! : boolean;
+  isAvailable!: boolean;
 
   @Prop({ type: [MenuItemOptionSchema], default: [] })
   options!: MenuItemOption[];

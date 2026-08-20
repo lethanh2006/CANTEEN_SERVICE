@@ -39,9 +39,8 @@ export abstract class BaseCrudController<
       TCreateDto,
       TUpdateDto
     >,
-  ) { }
+  ) {}
 }
-
 
 export function createCrudController<
   TDocument extends Document,

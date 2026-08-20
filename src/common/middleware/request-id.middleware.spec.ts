@@ -1,9 +1,6 @@
 import type { NextFunction, Response } from 'express';
 import type { RequestWithContext } from '../interfaces/request-context.interface';
-import {
-  RequestIdMiddleware,
-  SAFE_REQUEST_ID,
-} from './request-id.middleware';
+import { RequestIdMiddleware, SAFE_REQUEST_ID } from './request-id.middleware';
 
 describe('RequestIdMiddleware', () => {
   const middleware = new RequestIdMiddleware();
@@ -15,14 +12,15 @@ describe('RequestIdMiddleware', () => {
           ? {}
           : { 'x-request-id': incomingRequestId },
     } as unknown as RequestWithContext;
+    const setHeader = jest.fn();
     const response = {
-      setHeader: jest.fn(),
+      setHeader,
     } as unknown as Response;
     const next = jest.fn() as NextFunction;
 
     middleware.use(request, response, next);
 
-    return { next, request, response };
+    return { next, request, setHeader };
   };
 
   it('giữ nguyên x-request-id hợp lệ', () => {
@@ -34,7 +32,7 @@ describe('RequestIdMiddleware', () => {
     expect(result.request.headers['x-request-id']).toBe(
       'gateway-request_123:abc',
     );
-    expect(result.response.setHeader).toHaveBeenCalledWith(
+    expect(result.setHeader).toHaveBeenCalledWith(
       'x-request-id',
       'gateway-request_123:abc',
     );
@@ -48,10 +46,7 @@ describe('RequestIdMiddleware', () => {
 
     expect(requestId).toEqual(expect.any(String));
     expect(requestId).toMatch(SAFE_REQUEST_ID);
-    expect(result.response.setHeader).toHaveBeenCalledWith(
-      'x-request-id',
-      requestId,
-    );
+    expect(result.setHeader).toHaveBeenCalledWith('x-request-id', requestId);
     expect(result.next).toHaveBeenCalledTimes(1);
   });
 
@@ -63,10 +58,7 @@ describe('RequestIdMiddleware', () => {
     expect(requestId).not.toBe(unsafeRequestId);
     expect(requestId).toMatch(SAFE_REQUEST_ID);
     expect(result.request.headers['x-request-id']).toBe(requestId);
-    expect(result.response.setHeader).toHaveBeenCalledWith(
-      'x-request-id',
-      requestId,
-    );
+    expect(result.setHeader).toHaveBeenCalledWith('x-request-id', requestId);
     expect(result.next).toHaveBeenCalledTimes(1);
   });
 });
