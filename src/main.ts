@@ -1,28 +1,48 @@
+import '@nrapp/observability/register';
 import dns from 'dns';
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 import { NestFactory } from '@nestjs/core';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
+import {
+  logAndRecordException,
+  shutdownTelemetry,
+} from '@nrapp/observability';
 import { AppModule } from './app.module';
-import { toError } from './common/utils/error.util';
+import { appLogger, nestLogger } from './common/observability/app-logger';
+import { createValidationException } from './common/validation/validation-exception';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { logger: nestLogger });
   app.enableShutdownHooks();
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
       whitelist: true,
       forbidNonWhitelisted: true,
+      exceptionFactory: createValidationException,
     }),
   );
   await app.listen(process.env.PORT ?? 3000);
 }
-bootstrap().catch((err: unknown) => {
-  const error = toError(err);
-  new Logger('Bootstrap').error(
-    `Không thể khởi động dịch vụ căn tin: ${error.message}`,
-    error.stack,
+void bootstrap().catch(async (error: unknown) => {
+  logAndRecordException(
+    appLogger,
+    'process.bootstrap.failed',
+    error,
+    {},
+    {
+      message: 'Không thể khởi động dịch vụ căn tin',
+      classification: {
+        statusCode: 500,
+        code: 'BOOTSTRAP_FAILED',
+        expected: false,
+        retryable: false,
+        logLevel: 'fatal',
+      },
+    },
   );
+  appLogger.flush();
+  await shutdownTelemetry(3_000);
   process.exitCode = 1;
 });

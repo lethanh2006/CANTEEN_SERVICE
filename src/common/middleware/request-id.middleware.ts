@@ -1,5 +1,6 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { runWithLogContext } from '@nrapp/observability';
 import type { NextFunction, Response } from 'express';
 import type { RequestWithContext } from '../interfaces/request-context.interface';
 
@@ -26,6 +27,6 @@ export class RequestIdMiddleware implements NestMiddleware {
     };
     request.headers[REQUEST_ID_HEADER] = requestId;
     response.setHeader(REQUEST_ID_HEADER, requestId);
-    next();
+    runWithLogContext({ request_id: requestId }, () => next());
   }
 }

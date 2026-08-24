@@ -2,82 +2,87 @@ import {
   ArgumentsHost,
   Catch,
   ExceptionFilter,
-  HttpException,
-  HttpStatus,
   Injectable,
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
-import { toError } from '../utils/error.util';
-import { AuthenticatedUser } from '../interfaces/authenticated-user.interface';
+import {
+  classifyException,
+  logAndRecordException,
+  normalizeRouteTemplate,
+} from '@nrapp/observability';
+import type { Request, Response } from 'express';
 import type { RequestContext } from '../interfaces/request-context.interface';
-import { StructuredLoggerService } from '../observability/structured-logger.service';
+import { appLogger } from '../observability/app-logger';
 
-interface HttpRequestContext {
-  method?: string;
-  originalUrl?: string;
-  url?: string;
-  user?: AuthenticatedUser;
+interface HttpRequestContext extends Request {
   requestContext?: RequestContext;
 }
 
-/**
- * Ghi log lỗi tập trung và trả response HTTP theo chuẩn của NestJS.
- */
 @Catch()
 @Injectable()
 export class GlobalExceptionFilter implements ExceptionFilter {
-  constructor(
-    private readonly httpAdapterHost: HttpAdapterHost,
-    private readonly logger: StructuredLoggerService,
-  ) {}
+  constructor(private readonly httpAdapterHost: HttpAdapterHost) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    const { httpAdapter } = this.httpAdapterHost;
-    const httpContext = host.switchToHttp();
-    const request = httpContext.getRequest<HttpRequestContext>();
+    const http = host.switchToHttp();
+    const request = http.getRequest<HttpRequestContext>();
+    const response = http.getResponse<Response>();
+    const classification = classifyException(exception);
 
-    const statusCode =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
-    const error = toError(exception);
-    const userId = request.user?._id ?? request.user?.id;
-    const requestContext = request.requestContext;
-    const logDetails = {
-      requestId: requestContext?.requestId,
-      statusCode,
-      method: request.method,
-      path: request.originalUrl ?? request.url,
-      ...(userId ? { userId } : {}),
-      errorName: error.name,
-      message: error.message,
-      durationMs: requestContext
-        ? Number(process.hrtime.bigint() - requestContext.startedAt) / 1e6
-        : undefined,
-    };
-
-    if (statusCode >= 500) {
-      this.logger.error('http_request_failed', logDetails, error.stack);
-    } else {
-      this.logger.warn('http_request_rejected', logDetails);
+    let errorId: string | undefined;
+    if (!classification.expected) {
+      const result = logAndRecordException(
+        appLogger,
+        'http.request.failed',
+        exception,
+        {
+          'http.request.method': request.method,
+          'http.route': routeTemplate(request),
+          'http.response.status_code': classification.statusCode,
+          request_id: request.requestContext?.requestId,
+        },
+        { classification },
+      );
+      errorId = result.errorId;
     }
 
-    const exceptionResponse =
-      exception instanceof HttpException ? exception.getResponse() : null;
-    const responseBody =
-      exceptionResponse !== null &&
-      typeof exceptionResponse === 'object' &&
-      !Array.isArray(exceptionResponse)
-        ? {
-            ...(exceptionResponse as Record<string, unknown>),
-            requestId: requestContext?.requestId,
-          }
-        : {
-            statusCode,
-            message: exceptionResponse ?? 'Internal server error',
-            requestId: requestContext?.requestId,
-          };
+    const body = classification.expected
+      ? expectedResponse(classification, request.requestContext?.requestId)
+      : {
+          statusCode: classification.statusCode,
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          requestId: request.requestContext?.requestId,
+          errorId,
+        };
 
-    httpAdapter.reply(httpContext.getResponse(), responseBody, statusCode);
+    this.httpAdapterHost.httpAdapter.reply(
+      response,
+      body,
+      classification.statusCode,
+    );
   }
+}
+
+function routeTemplate(request: HttpRequestContext): string {
+  const route = (request.route as { path?: unknown } | undefined)?.path;
+  const base = request.baseUrl ?? '';
+  return normalizeRouteTemplate(
+    typeof route === 'string' ? `${base}${route}` : 'unknown',
+  );
+}
+
+function expectedResponse(
+  classification: ReturnType<typeof classifyException>,
+  requestId: string | undefined,
+): Record<string, unknown> {
+  return {
+    statusCode: classification.statusCode,
+    code: classification.code,
+    message: classification.safeMessage,
+    ...(classification.validationFields.length
+      ? { details: { fields: classification.validationFields } }
+      : {}),
+    requestId,
+  };
 }
