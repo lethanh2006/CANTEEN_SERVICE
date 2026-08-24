@@ -45,6 +45,16 @@ export class MenuController {
   }
 
   /**
+   * GET /api/canteen/admin/menu
+   * Lấy cả món/danh mục đang ẩn để quản trị viên có thể bật lại hoặc chỉnh sửa.
+   */
+  @Get('admin/menu')
+  @Roles(Role.ADMIN, Role.MANAGER)
+  async getAdminMenu() {
+    return this.menuService.getAdminMenu();
+  }
+
+  /**
    * POST /api/canteen/admin/menu
    * Tạo mới món ăn
    * Quyền hạn: Quản trị viên hoặc quản lý.

@@ -64,6 +64,21 @@ export class MenuService {
   }
 
   /**
+   * Trả toàn bộ danh mục và món ăn cho màn quản trị, kể cả dữ liệu đang ẩn.
+   */
+  async getAdminMenu(): Promise<{
+    categories: Category[];
+    items: MenuItem[];
+  }> {
+    const [categories, items] = await Promise.all([
+      this.categoryModel.find({}).sort({ displayOrder: 1, name: 1 }).exec(),
+      this.menuItemModel.find({}).sort({ name: 1 }).exec(),
+    ]);
+
+    return { categories, items };
+  }
+
+  /**
    * Tạo mới một món ăn.
    */
   async createMenuItem(
