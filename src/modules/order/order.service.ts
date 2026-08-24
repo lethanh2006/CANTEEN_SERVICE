@@ -1,12 +1,13 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, QueryFilter, Types } from 'mongoose';
 import { Order, OrderDocument, OrderItem } from '../../schemas/orders.schema';
 import { MenuItem, MenuItemDocument } from '../../schemas/menu_items.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -17,6 +18,7 @@ import {
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { OrderSettlementService } from './order-settlement.service';
+import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 
 @Injectable()
 export class OrderService {
@@ -217,6 +219,52 @@ export class OrderService {
   }
 
   /**
+   * Danh sách đơn dành cho màn hình vận hành căn tin.
+   */
+  async listOrders(query: ListOrdersQueryDto) {
+    const filter: QueryFilter<OrderDocument> = {};
+    if (query.status) filter.status = query.status;
+    if (query.paymentStatus) filter.paymentStatus = query.paymentStatus;
+    if (query.userId) filter.userId = new Types.ObjectId(query.userId);
+
+    const from = query.from ? new Date(query.from) : undefined;
+    const to = query.to ? new Date(query.to) : undefined;
+    if (from && to && from > to) {
+      throw new BadRequestException(
+        'Thời gian bắt đầu phải nhỏ hơn hoặc bằng thời gian kết thúc',
+      );
+    }
+    if (from || to) {
+      filter.createdAt = {
+        ...(from ? { $gte: from } : {}),
+        ...(to ? { $lte: to } : {}),
+      };
+    }
+
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const [orders, total] = await Promise.all([
+      this.orderModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .exec(),
+      this.orderModel.countDocuments(filter).exec(),
+    ]);
+
+    return {
+      orders,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
    * Lấy thông tin chi tiết của một đơn hàng
    */
   async getOrderById(id: string, user?: AuthenticatedUser): Promise<Order> {
@@ -238,11 +286,62 @@ export class OrderService {
         order.userId.toString() !== requesterId &&
         !privilegedRoles.has(user.role?.toLowerCase() ?? '')
       ) {
-        throw new UnauthorizedException('Bạn không có quyền xem đơn hàng này');
+        throw new ForbiddenException('Bạn không có quyền xem đơn hàng này');
       }
     }
 
     return order;
+  }
+
+  /**
+   * Hủy đơn có kiểm tra chủ sở hữu, vai trò và trạng thái hiện tại.
+   */
+  async cancelOrder(
+    id: string,
+    user: AuthenticatedUser,
+    reason?: string,
+  ): Promise<Order> {
+    const rawUserId = user._id ?? user.id;
+    if (!rawUserId || !Types.ObjectId.isValid(rawUserId)) {
+      throw new UnauthorizedException(
+        'Thông tin người dùng không hợp lệ hoặc thiếu ID người dùng',
+      );
+    }
+
+    const order = await this.orderModel.findById(id).exec();
+    if (!order) {
+      throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
+    }
+
+    const isOwner = order.userId.toString() === rawUserId;
+    const isOperator = new Set(['admin', 'manager', 'cashier', 'waiter']).has(
+      user.role?.toLowerCase() ?? '',
+    );
+    if (!isOwner && !isOperator) {
+      throw new ForbiddenException('Bạn không có quyền hủy đơn hàng này');
+    }
+
+    if (order.status === 'CANCELLED') {
+      return order;
+    }
+    const allowedStatuses = isOperator
+      ? new Set(['CREATED', 'CONFIRMED'])
+      : new Set(['CREATED']);
+    if (!allowedStatuses.has(order.status)) {
+      throw new ConflictException(
+        `Đơn hàng ở trạng thái '${order.status}' không thể hủy`,
+      );
+    }
+
+    order.status = 'CANCELLED';
+    order.cancelledAt = new Date();
+    order.cancelledBy = new Types.ObjectId(rawUserId);
+    order.cancellationReason = reason?.trim() || undefined;
+    const cancelledOrder = await order.save();
+    await this.orderSettlementService.reconcileTableForOrder(
+      cancelledOrder._id,
+    );
+    return cancelledOrder;
   }
 
   /**
@@ -315,8 +414,10 @@ export class OrderService {
       return order;
     }
 
-    if (order.status === 'CANCELLED') {
-      throw new ConflictException('Đơn hàng đã bị hủy, không thể hoàn thành');
+    if (order.status !== 'READY') {
+      throw new ConflictException(
+        `Đơn hàng ở trạng thái '${order.status}' không thể hoàn thành (chỉ đơn READY mới được hoàn thành)`,
+      );
     }
 
     order.status = 'COMPLETED';

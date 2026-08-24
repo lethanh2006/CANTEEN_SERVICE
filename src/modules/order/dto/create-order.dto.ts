@@ -60,8 +60,8 @@ export class CreateOrderDto {
   items!: CreateOrderItemDto[];
 
   @IsOptional()
-  @IsEnum(['CASH', 'VNPAY', 'MOMO', 'VIETQR'], {
-    message: 'Phương thức thanh toán không hợp lệ',
+  @IsEnum(['CASH', 'VIETQR'], {
+    message: 'Phương thức thanh toán phải là CASH hoặc VIETQR',
   })
   paymentMethod?: string;
 }

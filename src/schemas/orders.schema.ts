@@ -151,11 +151,24 @@ export class Order {
 
   @Prop({ required: false })
   paidAt?: Date;
+
+  @Prop({ required: false })
+  cancelledAt?: Date;
+
+  @Prop({
+    type: mongoose.Schema.Types.ObjectId,
+    required: false,
+  })
+  cancelledBy?: Types.ObjectId;
+
+  @Prop({ required: false, maxlength: 500 })
+  cancellationReason?: string;
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
 
 OrderSchema.index({ status: 1, priorityScore: -1, createdAt: 1 });
+OrderSchema.index({ userId: 1, createdAt: -1 });
 OrderSchema.index({ paymentId: 1 }, { unique: true, sparse: true });
 OrderSchema.index({ paymentEventId: 1 }, { unique: true, sparse: true });
 OrderSchema.index({ providerTransactionId: 1 }, { unique: true, sparse: true });

@@ -5,6 +5,7 @@ import {
   Patch,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { OrderService } from './order.service';
@@ -16,6 +17,8 @@ import { Role } from '../../common/enums/role.enum';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-object-id.pipe';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { Authenticated } from '../../common/decorators/authenticated.decorator';
+import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
+import { CancelOrderDto } from './dto/cancel-order.dto';
 
 @Controller('api/canteen/orders')
 @UseGuards(RolesGuard)
@@ -48,6 +51,16 @@ export class OrderController {
   }
 
   /**
+   * GET /api/canteen/orders
+   * Danh sách vận hành có lọc và phân trang.
+   */
+  @Get()
+  @Roles(Role.ADMIN, Role.MANAGER, Role.CASHIER, Role.WAITER, Role.CHEF)
+  async listOrders(@Query() query: ListOrdersQueryDto) {
+    return this.orderService.listOrders(query);
+  }
+
+  /**
    * GET /api/canteen/orders/:id
    * Lấy thông tin chi tiết của một đơn hàng
    * Quyền hạn: Nhân viên hoặc bộ phận bếp.
@@ -59,6 +72,20 @@ export class OrderController {
     @User() user: AuthenticatedUser,
   ) {
     return this.orderService.getOrderById(id, user);
+  }
+
+  /**
+   * PATCH /api/canteen/orders/:id/cancel
+   * Chủ đơn được hủy khi đơn chưa xác nhận; nhân sự vận hành được hủy trước khi nấu.
+   */
+  @Patch(':id/cancel')
+  @Authenticated()
+  async cancelOrder(
+    @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
+    @Body() body: CancelOrderDto,
+    @User() user: AuthenticatedUser,
+  ) {
+    return this.orderService.cancelOrder(id, user, body.reason);
   }
 
   /**

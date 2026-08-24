@@ -7,9 +7,8 @@ import { Table, TableDocument } from '../../schemas/tables.schema';
 /**
  * Đối soát trạng thái bàn từ dữ liệu Order mới nhất trong MongoDB.
  *
- * Cả luồng hoàn tất đơn lẫn consumer thanh toán đều gọi hàm này sau khi ghi
- * trạng thái của mình. Vì vậy, khi hai cập nhật chạy đồng thời, lượt ghi hoàn
- * tất sau cùng luôn đọc được cặp trạng thái COMPLETED + PAID và giải phóng bàn.
+ * Cả luồng hoàn tất, hủy đơn lẫn consumer thanh toán đều gọi hàm này. Bàn chỉ
+ * được giải phóng khi không còn đơn chưa tất toán nào cùng bàn.
  */
 @Injectable()
 export class OrderSettlementService {
@@ -23,22 +22,32 @@ export class OrderSettlementService {
   async reconcileTableForOrder(
     orderId: string | Types.ObjectId,
   ): Promise<void> {
-    const settledOrder = await this.orderModel
-      .findOne({
-        _id: orderId,
-        status: 'COMPLETED',
-        paymentStatus: 'PAID',
-        tableId: { $ne: null },
-      })
+    const order = await this.orderModel
+      .findById(orderId)
+      .select({ tableId: 1 })
       .exec();
 
-    if (!settledOrder?.tableId) {
+    if (!order?.tableId) {
       return;
     }
 
+    const unsettledOrder = await this.orderModel
+      .exists({
+        tableId: order.tableId,
+        $nor: [
+          { status: 'CANCELLED' },
+          {
+            status: { $in: ['COMPLETED', 'PAID'] },
+            paymentStatus: 'PAID',
+          },
+        ],
+      })
+      .exec();
+    if (unsettledOrder) return;
+
     await this.tableModel
       .updateOne(
-        { _id: settledOrder.tableId, status: { $ne: 'empty' } },
+        { _id: order.tableId, status: { $ne: 'empty' } },
         { $set: { status: 'empty' } },
       )
       .exec();
