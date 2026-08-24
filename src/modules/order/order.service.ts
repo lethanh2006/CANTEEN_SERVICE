@@ -527,6 +527,11 @@ export class OrderService {
     if (order.status === 'CANCELLED') {
       return order;
     }
+    if (order.paymentStatus === 'PAID') {
+      throw new ConflictException(
+        'Đơn hàng đã thanh toán không thể hủy khi chưa hoàn tiền',
+      );
+    }
     const allowedStatuses = isOperator
       ? new Set(['CREATED', 'CONFIRMED'])
       : new Set(['CREATED']);
@@ -536,11 +541,30 @@ export class OrderService {
       );
     }
 
-    order.status = 'CANCELLED';
-    order.cancelledAt = new Date();
-    order.cancelledBy = new Types.ObjectId(rawUserId);
-    order.cancellationReason = reason?.trim() || undefined;
-    const cancelledOrder = await order.save();
+    const cancellationReason = reason?.trim();
+    const cancelledOrder = await this.orderModel
+      .findOneAndUpdate(
+        {
+          _id: order._id,
+          status: { $in: [...allowedStatuses] },
+          paymentStatus: { $ne: 'PAID' },
+        },
+        {
+          $set: {
+            status: 'CANCELLED',
+            cancelledAt: new Date(),
+            cancelledBy: new Types.ObjectId(rawUserId),
+            ...(cancellationReason ? { cancellationReason } : {}),
+          },
+        },
+        { new: true, runValidators: true },
+      )
+      .exec();
+    if (!cancelledOrder) {
+      throw new ConflictException(
+        'Đơn hàng đã thay đổi trạng thái hoặc thanh toán; vui lòng tải lại',
+      );
+    }
     await this.orderSettlementService.reconcileTableForOrder(
       cancelledOrder._id,
     );
@@ -560,6 +584,11 @@ export class OrderService {
     if (order.status !== 'CREATED') {
       throw new ConflictException(
         `Đơn hàng ở trạng thái '${order.status}' không thể xác nhận (chỉ đơn CREATED mới được xác nhận)`,
+      );
+    }
+    if (order.paymentMethod !== 'CASH' && order.paymentStatus !== 'PAID') {
+      throw new ConflictException(
+        'Đơn thanh toán điện tử phải được thanh toán trước khi xác nhận',
       );
     }
 
@@ -586,10 +615,22 @@ export class OrderService {
     const priorityScore =
       userRoleScore * 100 + isTakeaway * 50 + waitingMinutes * 1.5;
 
-    order.status = 'CONFIRMED';
-    order.priorityScore = priorityScore;
-
-    const updatedOrder = await order.save();
+    const updatedOrder = await this.orderModel
+      .findOneAndUpdate(
+        {
+          _id: order._id,
+          status: 'CREATED',
+          $or: [{ paymentMethod: 'CASH' }, { paymentStatus: 'PAID' }],
+        },
+        { $set: { status: 'CONFIRMED', priorityScore } },
+        { new: true, runValidators: true },
+      )
+      .exec();
+    if (!updatedOrder) {
+      throw new ConflictException(
+        'Đơn hàng đã thay đổi trạng thái hoặc thanh toán; vui lòng tải lại',
+      );
+    }
 
     await this.rabbitMQService.publish('order.confirmed', {
       orderId: updatedOrder._id.toString(),
