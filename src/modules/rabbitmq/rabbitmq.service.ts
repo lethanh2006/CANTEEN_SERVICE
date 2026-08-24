@@ -5,7 +5,17 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  getLogContext,
+  injectTraceHeaders,
+  logAndRecordException,
+  recordExceptionOnActiveSpan,
+  runWithLogContext,
+  sanitizeText,
+  withMessageSpan,
+} from '@nrapp/observability';
 import * as amqp from 'amqplib';
+import { appLogger } from '../../common/observability/app-logger';
 import { toError } from '../../common/utils/error.util';
 
 type MessageHandler = (content: unknown) => Promise<void> | void;
@@ -33,28 +43,62 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   }
 
   async publish(queueName: string, message: unknown): Promise<void> {
-    if (!this.channel) {
-      this.logger.warn(
-        `Kênh RabbitMQ chưa sẵn sàng, bỏ qua việc phát tới '${queueName}'`,
-      );
-      return;
-    }
-    try {
-      await this.channel.assertQueue(queueName, { durable: true });
-      this.channel.sendToQueue(
-        queueName,
-        Buffer.from(JSON.stringify(message)),
-        { persistent: true, contentType: 'application/json' },
-      );
-      await this.channel.waitForConfirms();
-      this.logger.log(`Đã phát thông điệp tới hàng đợi '${queueName}'`);
-    } catch (error: unknown) {
-      const typedError = toError(error);
-      this.logger.error(
-        `Không thể phát thông điệp tới '${queueName}': ${typedError.message}`,
-        typedError.stack,
-      );
-    }
+    await withMessageSpan(
+      `${queueName} publish`,
+      {},
+      async () => {
+        try {
+          const channel = this.channel;
+          if (!channel) {
+            throw new Error('Kênh RabbitMQ chưa sẵn sàng');
+          }
+          const requestId = getLogContext().request_id;
+          const headers = injectTraceHeaders(
+            typeof requestId === 'string'
+              ? { 'x-request-id': requestId }
+              : undefined,
+          );
+          await channel.assertQueue(queueName, { durable: true });
+          channel.sendToQueue(
+            queueName,
+            Buffer.from(JSON.stringify(message)),
+            {
+              persistent: true,
+              contentType: 'application/json',
+              headers,
+            },
+          );
+          await channel.waitForConfirms();
+        } catch (error: unknown) {
+          logAndRecordException(
+            appLogger,
+            'messaging.publish.failed',
+            error,
+            {
+              'messaging.system': 'rabbitmq',
+              'messaging.destination.name': queueName,
+            },
+            {
+              message: 'Không thể phát RabbitMQ message',
+              classification: {
+                statusCode: 500,
+                code: 'RABBITMQ_PUBLISH_FAILED',
+                expected: false,
+                retryable: true,
+              },
+            },
+          );
+        }
+      },
+      {
+        kind: 3,
+        attributes: {
+          'messaging.system': 'rabbitmq',
+          'messaging.destination.name': queueName,
+          'messaging.operation.type': 'publish',
+        },
+      },
+    );
   }
 
   async subscribe<T>(
@@ -214,16 +258,58 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     if (!channel) {
       return;
     }
+
+    const rawProperties: unknown = message.properties;
+    const properties = isRecord(rawProperties) ? rawProperties : {};
+    const rawHeaders = properties.headers;
+    const headers = isRecord(rawHeaders) ? rawHeaders : {};
+    const requestId = optionalText(headers['x-request-id']);
+    const messageId = optionalText(properties.messageId);
+
+    await runWithLogContext(
+      {
+        request_id: requestId,
+        'messaging.message.id': messageId,
+      },
+      () =>
+        withMessageSpan(
+          `${queueName} process`,
+          headers,
+          () =>
+            this.processMessageAttempt(
+              channel,
+              queueName,
+              message,
+              callback,
+              properties,
+              headers,
+            ),
+          {
+            attributes: {
+              'messaging.system': 'rabbitmq',
+              'messaging.destination.name': queueName,
+              'messaging.operation.type': 'process',
+              ...(messageId ? { 'messaging.message.id': messageId } : {}),
+            },
+          },
+        ),
+    );
+  }
+
+  private async processMessageAttempt(
+    channel: amqp.ConfirmChannel,
+    queueName: string,
+    message: amqp.ConsumeMessage,
+    callback: MessageHandler,
+    properties: Record<string, unknown>,
+    headers: Record<string, unknown>,
+  ): Promise<void> {
     try {
       const content = JSON.parse(message.content.toString()) as unknown;
       await callback(content);
       channel.ack(message);
     } catch (error: unknown) {
       const typedError = toError(error);
-      const rawProperties: unknown = message.properties;
-      const properties = isRecord(rawProperties) ? rawProperties : {};
-      const rawHeaders = properties.headers;
-      const headers = isRecord(rawHeaders) ? rawHeaders : {};
       const retryHeader = headers['x-retry-count'];
       const retryCount =
         typeof retryHeader === 'number' && Number.isSafeInteger(retryHeader)
@@ -238,6 +324,9 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       const correlationId = optionalText(properties.correlationId);
 
       if (nextRetry <= 5) {
+        recordExceptionOnActiveSpan(typedError, {
+          code: 'MESSAGE_PROCESSING_RETRY',
+        });
         try {
           channel.sendToQueue(queueName, message.content, {
             persistent: true,
@@ -251,8 +340,16 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
           });
           await channel.waitForConfirms();
           channel.ack(message);
-          this.logger.warn(
-            `Xử lý '${queueName}' lỗi, đưa lại hàng đợi lần ${nextRetry}: ${typedError.message}`,
+          appLogger.warn(
+            {
+              'event.name': 'messaging.consume.retry_scheduled',
+              'messaging.system': 'rabbitmq',
+              'messaging.destination.name': queueName,
+              'messaging.retry.count': nextRetry,
+              'messaging.retry.max': 5,
+              'error.code': 'MESSAGE_PROCESSING_RETRY',
+            },
+            'Đã đưa RabbitMQ message vào hàng đợi để xử lý lại',
           );
         } catch (republishError: unknown) {
           this.requeueOriginal(
@@ -274,14 +371,32 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
           headers: {
             ...headers,
             'x-retry-count': nextRetry,
-            'x-last-error': typedError.message.slice(0, 200),
+            'x-last-error': sanitizeText(typedError.message).slice(0, 200),
           },
         });
         await channel.waitForConfirms();
         channel.ack(message);
-        this.logger.error(
-          `Đã chuyển thông điệp '${queueName}' vào DLQ: ${typedError.message}`,
-          typedError.stack,
+        logAndRecordException(
+          appLogger,
+          'messaging.consume.exhausted',
+          typedError,
+          {
+            'messaging.system': 'rabbitmq',
+            'messaging.destination.name': queueName,
+            'messaging.dead_letter.destination.name': `${queueName}.dlq`,
+            'messaging.retry.count': nextRetry,
+            'messaging.retry.max': 5,
+            ...(messageId ? { 'messaging.message.id': messageId } : {}),
+          },
+          {
+            message: 'RabbitMQ message đã hết số lần xử lý lại và vào DLQ',
+            classification: {
+              statusCode: 500,
+              code: 'MESSAGE_PROCESSING_EXHAUSTED',
+              expected: false,
+              retryable: false,
+            },
+          },
         );
       } catch (republishError: unknown) {
         this.requeueOriginal(
@@ -300,9 +415,17 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     destination: string,
     publishError: Error,
   ): void {
-    this.logger.error(
-      `RabbitMQ chưa xác nhận thông điệp tới '${destination}', giữ bản gốc để xử lý lại: ${publishError.message}`,
-      publishError.stack,
+    recordExceptionOnActiveSpan(publishError, {
+      code: 'RABBITMQ_REPUBLISH_UNCONFIRMED',
+    });
+    appLogger.warn(
+      {
+        'event.name': 'messaging.republish.unconfirmed',
+        'messaging.system': 'rabbitmq',
+        'messaging.destination.name': destination,
+        'error.code': 'RABBITMQ_REPUBLISH_UNCONFIRMED',
+      },
+      'RabbitMQ chưa xác nhận bản sao; giữ message gốc để xử lý lại',
     );
     try {
       channel.nack(message, false, true);

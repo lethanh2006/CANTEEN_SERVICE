@@ -1,11 +1,7 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-  OnModuleInit,
-} from '@nestjs/common';
+import { ConflictException, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { appLogger } from '../../../common/observability/app-logger';
 import { Order, OrderDocument } from '../../../schemas/orders.schema';
 import { RabbitMQService } from '../../rabbitmq/rabbitmq.service';
 import { OrderSettlementService } from '../order-settlement.service';
@@ -29,8 +25,6 @@ export interface PaymentSucceededEvent {
 
 @Injectable()
 export class PaymentConsumer implements OnModuleInit {
-  private readonly logger = new Logger(PaymentConsumer.name);
-
   constructor(
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
@@ -74,8 +68,14 @@ export class PaymentConsumer implements OnModuleInit {
       .exec();
 
     if (updatedOrder) {
-      this.logger.log(
-        `Đã cập nhật payment '${event.data.paymentId}' cho order '${updatedOrder._id.toString()}'`,
+      appLogger.info(
+        {
+          'event.name': 'canteen.payment.settled',
+          'payment.id': event.data.paymentId,
+          'order.id': updatedOrder._id.toString(),
+          'messaging.message.id': event.eventId,
+        },
+        'Đã cập nhật trạng thái thanh toán cho đơn hàng',
       );
       await this.orderSettlementService.reconcileTableForOrder(
         updatedOrder._id,
