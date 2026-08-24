@@ -56,23 +56,29 @@ export class KitchenService {
    * Chuyển trạng thái đơn hàng sang COOKING.
    */
   async setOrderCooking(id: string): Promise<Order> {
-    const order = await this.orderModel.findById(id).exec();
-    if (!order) {
+    const transitioned = await this.orderModel
+      .findOneAndUpdate(
+        { _id: id, status: 'CONFIRMED' },
+        { $set: { status: 'COOKING' } },
+        { new: true },
+      )
+      .exec();
+    if (transitioned) {
+      return transitioned;
+    }
+
+    const current = await this.orderModel.findById(id).exec();
+    if (!current) {
       throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
     }
 
-    if (order.status === 'COOKING') {
-      return order;
+    if (current.status === 'COOKING') {
+      return current;
     }
 
-    if (order.status !== 'CONFIRMED') {
-      throw new ConflictException(
-        `Đơn hàng ở trạng thái '${order.status}' không thể chuyển sang COOKING (chỉ đơn CONFIRMED mới có thể nấu)`,
-      );
-    }
-
-    order.status = 'COOKING';
-    return await order.save();
+    throw new ConflictException(
+      `Đơn hàng ở trạng thái '${current.status}' không thể chuyển sang COOKING (chỉ đơn CONFIRMED mới có thể nấu)`,
+    );
   }
 
   /**
@@ -80,31 +86,35 @@ export class KitchenService {
    * Chuyển đơn sang READY và phát sự kiện món đã sẵn sàng.
    */
   async setOrderReady(id: string): Promise<Order> {
-    const order = await this.orderModel.findById(id).exec();
-    if (!order) {
+    const transitioned = await this.orderModel
+      .findOneAndUpdate(
+        { _id: id, status: 'COOKING' },
+        { $set: { status: 'READY' } },
+        { new: true },
+      )
+      .exec();
+
+    if (transitioned) {
+      await this.rabbitMQService.publish('order.ready', {
+        orderId: transitioned._id.toString(),
+        orderNumber: transitioned.orderNumber,
+        status: transitioned.status,
+        updatedAt: transitioned.updatedAt,
+      });
+      return transitioned;
+    }
+
+    const current = await this.orderModel.findById(id).exec();
+    if (!current) {
       throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
     }
 
-    if (order.status === 'READY') {
-      return order;
+    if (current.status === 'READY') {
+      return current;
     }
 
-    if (order.status !== 'COOKING' && order.status !== 'CONFIRMED') {
-      throw new ConflictException(
-        `Đơn hàng ở trạng thái '${order.status}' không thể chuyển sang READY (cần ở trạng thái CONFIRMED hoặc COOKING)`,
-      );
-    }
-
-    order.status = 'READY';
-    const updatedOrder = await order.save();
-
-    await this.rabbitMQService.publish('order.ready', {
-      orderId: updatedOrder._id.toString(),
-      orderNumber: updatedOrder.orderNumber,
-      status: updatedOrder.status,
-      updatedAt: updatedOrder.updatedAt,
-    });
-
-    return updatedOrder;
+    throw new ConflictException(
+      `Đơn hàng ở trạng thái '${current.status}' không thể chuyển sang READY (chỉ đơn COOKING mới có thể hoàn tất chế biến)`,
+    );
   }
 }
