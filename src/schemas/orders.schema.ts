@@ -144,6 +144,9 @@ export class Order {
   paymentId?: string;
 
   @Prop({ required: false })
+  paymentEventId?: string;
+
+  @Prop({ required: false })
   providerTransactionId?: string;
 
   @Prop({ required: false })
@@ -153,3 +156,6 @@ export class Order {
 export const OrderSchema = SchemaFactory.createForClass(Order);
 
 OrderSchema.index({ status: 1, priorityScore: -1, createdAt: 1 });
+OrderSchema.index({ paymentId: 1 }, { unique: true, sparse: true });
+OrderSchema.index({ paymentEventId: 1 }, { unique: true, sparse: true });
+OrderSchema.index({ providerTransactionId: 1 }, { unique: true, sparse: true });
