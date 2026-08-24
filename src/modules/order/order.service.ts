@@ -3,6 +3,8 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -19,15 +21,33 @@ import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { OrderSettlementService } from './order-settlement.service';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
+import { Table, TableDocument } from '../../schemas/tables.schema';
+import {
+  ORDER_NUMBER_COUNTER_KEY,
+  OrderCounter,
+  OrderCounterDocument,
+} from '../../schemas/order-counter.schema';
+import { toError } from '../../common/utils/error.util';
+
+type OrderTableClaim = {
+  tableId: Types.ObjectId;
+  transitionedFromEmpty: boolean;
+};
 
 @Injectable()
 export class OrderService {
+  private readonly logger = new Logger(OrderService.name);
+
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     @InjectModel(MenuItem.name)
     private readonly menuItemModel: Model<MenuItemDocument>,
     private readonly orderSettlementService: OrderSettlementService,
     private readonly rabbitMQService: RabbitMQService,
+    @InjectModel(Table.name)
+    private readonly tableModel: Model<TableDocument>,
+    @InjectModel(OrderCounter.name)
+    private readonly orderCounterModel: Model<OrderCounterDocument>,
   ) {}
 
   /**
@@ -125,25 +145,208 @@ export class OrderService {
       );
     }
 
-    const count = await this.orderModel.countDocuments().exec();
-    const orderNumber = `#${1001 + count}`;
+    const tableClaim = dto.tableId
+      ? await this.occupyTableForOrder(dto.tableId)
+      : null;
+    try {
+      const orderNumber = await this.nextOrderNumber();
+      const newOrder = new this.orderModel({
+        orderNumber,
+        userId,
+        userRole,
+        tableId: tableClaim?.tableId ?? null,
+        items: orderItems,
+        totalAmount: discountResult.rawTotal,
+        discountAmount: discountResult.totalDiscount,
+        finalAmount: discountResult.finalAmount,
+        status: 'CREATED',
+        priorityScore: 0,
+        paymentStatus: 'PENDING',
+        paymentMethod,
+      });
 
-    const newOrder = new this.orderModel({
-      orderNumber,
-      userId,
-      userRole,
-      tableId: dto.tableId ? new Types.ObjectId(dto.tableId) : null,
-      items: orderItems,
-      totalAmount: discountResult.rawTotal,
-      discountAmount: discountResult.totalDiscount,
-      finalAmount: discountResult.finalAmount,
-      status: 'CREATED',
-      priorityScore: 0,
-      paymentStatus: 'PENDING',
-      paymentMethod,
-    });
+      const savedOrder = await newOrder.save();
+      if (tableClaim) {
+        await this.ensureTableOccupied(tableClaim.tableId);
+      }
+      return savedOrder;
+    } catch (error) {
+      if (tableClaim?.transitionedFromEmpty) {
+        await this.rollbackTableOccupancy(tableClaim.tableId);
+      }
+      throw error;
+    }
+  }
 
-    return await newOrder.save();
+  /**
+   * Cấp số đơn hàng bằng một document counter duy nhất. Khi nâng cấp từ dữ
+   * liệu cũ, counter được seed từ orderNumber lớn nhất để không đụng unique
+   * index hiện có.
+   */
+  private async nextOrderNumber(): Promise<string> {
+    const incrementExisting = () =>
+      this.orderCounterModel
+        .findOneAndUpdate(
+          { key: ORDER_NUMBER_COUNTER_KEY },
+          { $inc: { sequence: 1 } },
+          { new: true, runValidators: true },
+        )
+        .exec();
+
+    let counter = await incrementExisting();
+    if (!counter) {
+      const seed = await this.readLegacyOrderNumberSeed();
+      try {
+        counter = await this.orderCounterModel
+          .findOneAndUpdate(
+            { key: ORDER_NUMBER_COUNTER_KEY },
+            [
+              {
+                $set: {
+                  key: ORDER_NUMBER_COUNTER_KEY,
+                  sequence: {
+                    $add: [{ $ifNull: ['$sequence', seed] }, 1],
+                  },
+                },
+              },
+            ],
+            { new: true, upsert: true },
+          )
+          .exec();
+      } catch (error) {
+        if (!this.isDuplicateKeyError(error)) throw error;
+        counter = await incrementExisting();
+      }
+    }
+
+    const sequence = Number(counter?.sequence);
+    if (!Number.isSafeInteger(sequence) || sequence < 1001) {
+      throw new InternalServerErrorException(
+        'Không thể cấp mã đơn hàng hợp lệ',
+      );
+    }
+    return `#${sequence}`;
+  }
+
+  private async readLegacyOrderNumberSeed(): Promise<number> {
+    const [result] = await this.orderModel
+      .aggregate<{ sequence?: number }>([
+        { $match: { orderNumber: { $regex: '^#[0-9]+$' } } },
+        {
+          $project: {
+            sequence: {
+              $convert: {
+                input: {
+                  $substrBytes: [
+                    '$orderNumber',
+                    1,
+                    { $subtract: [{ $strLenBytes: '$orderNumber' }, 1] },
+                  ],
+                },
+                to: 'double',
+                onError: 1000,
+                onNull: 1000,
+              },
+            },
+          },
+        },
+        { $group: { _id: null, sequence: { $max: '$sequence' } } },
+      ])
+      .exec();
+    const sequence = Number(result?.sequence ?? 1000);
+    return Number.isSafeInteger(sequence) && sequence >= 1000 ? sequence : 1000;
+  }
+
+  /**
+   * Bàn empty hoặc occupied đều nhận thêm đơn. Trạng thái reserved bị giữ lại
+   * vì hệ thống chưa có thông tin chủ đặt bàn để xác thực quyền sử dụng.
+   */
+  private async occupyTableForOrder(tableId: string): Promise<OrderTableClaim> {
+    if (!Types.ObjectId.isValid(tableId)) {
+      throw new BadRequestException('ID bàn ăn không đúng định dạng ObjectId');
+    }
+    const objectId = new Types.ObjectId(tableId);
+    const previous = await this.tableModel
+      .findOneAndUpdate(
+        { _id: objectId, status: { $in: ['empty', 'occupied'] } },
+        { $set: { status: 'occupied' } },
+        { new: false, runValidators: true },
+      )
+      .exec();
+    if (previous) {
+      return {
+        tableId: objectId,
+        transitionedFromEmpty: previous.status === 'empty',
+      };
+    }
+
+    const existing = await this.tableModel.findById(objectId).exec();
+    if (!existing) {
+      throw new NotFoundException(`Bàn ăn với ID '${tableId}' không tồn tại`);
+    }
+    throw new ConflictException(
+      `Bàn '${existing.name}' đang ở trạng thái '${existing.status}' và không thể nhận đơn`,
+    );
+  }
+
+  /**
+   * Sau khi lưu đơn, xác nhận lại occupied để khép cửa sổ race với một request
+   * tạo đơn khác đang rollback. Lỗi ở bước best-effort này không làm client tạo
+   * trùng đơn đã được lưu thành công.
+   */
+  private async ensureTableOccupied(tableId: Types.ObjectId): Promise<void> {
+    try {
+      await this.tableModel
+        .updateOne({ _id: tableId }, { $set: { status: 'occupied' } })
+        .exec();
+    } catch (error) {
+      this.logger.error(
+        `Không thể xác nhận trạng thái occupied cho bàn ${tableId.toString()}: ${toError(error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Chỉ hoàn tác bàn do request hiện tại chuyển từ empty. Nếu save có kết quả
+   * không chắc chắn hoặc đã có đơn khác cùng bàn, dữ liệu Order là nguồn quyết
+   * định và bàn vẫn giữ occupied.
+   */
+  private async rollbackTableOccupancy(tableId: Types.ObjectId): Promise<void> {
+    try {
+      const unsettledOrder = await this.orderModel
+        .exists({
+          tableId,
+          $nor: [
+            { status: 'CANCELLED' },
+            {
+              status: { $in: ['COMPLETED', 'PAID'] },
+              paymentStatus: 'PAID',
+            },
+          ],
+        })
+        .exec();
+      if (unsettledOrder) return;
+
+      await this.tableModel
+        .updateOne(
+          { _id: tableId, status: 'occupied' },
+          { $set: { status: 'empty' } },
+        )
+        .exec();
+    } catch (error) {
+      this.logger.error(
+        `Không thể hoàn tác trạng thái bàn ${tableId.toString()}: ${toError(error).message}`,
+      );
+    }
+  }
+
+  private isDuplicateKeyError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 11000
+    );
   }
 
   /**

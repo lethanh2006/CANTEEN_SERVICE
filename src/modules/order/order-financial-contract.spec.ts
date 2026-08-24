@@ -39,6 +39,8 @@ describe('Hợp đồng tiền và số lượng của đơn hàng', () => {
       menuItemModel as never,
       {} as never,
       {} as never,
+      {} as never,
+      {} as never,
     );
     const dto = Object.assign(new CreateOrderDto(), {
       items: [
@@ -71,6 +73,8 @@ describe('Hợp đồng tiền và số lượng của đơn hàng', () => {
     const service = new OrderService(
       {} as never,
       menuItemModel as never,
+      {} as never,
+      {} as never,
       {} as never,
       {} as never,
     );

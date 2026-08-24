@@ -25,6 +25,8 @@ describe('Vòng đời đơn hàng căn tin', () => {
         {} as never,
         settlement as never,
         {} as never,
+        {} as never,
+        {} as never,
       ),
       settlement,
     };

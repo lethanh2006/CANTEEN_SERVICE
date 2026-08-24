@@ -7,6 +7,10 @@ import { OrderService } from './order.service';
 import { Table, TableSchema } from '../../schemas/tables.schema';
 import { PaymentConsumer } from './consumers/payment.consumer';
 import { OrderSettlementService } from './order-settlement.service';
+import {
+  OrderCounter,
+  OrderCounterSchema,
+} from '../../schemas/order-counter.schema';
 
 @Module({
   imports: [
@@ -14,6 +18,7 @@ import { OrderSettlementService } from './order-settlement.service';
       { name: Order.name, schema: OrderSchema },
       { name: MenuItem.name, schema: MenuItemSchema },
       { name: Table.name, schema: TableSchema },
+      { name: OrderCounter.name, schema: OrderCounterSchema },
     ]),
   ],
   controllers: [OrderController],
