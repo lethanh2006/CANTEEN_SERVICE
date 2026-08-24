@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseCrudService } from '../../common/crud';
 import { Category, CategoryDocument } from '../../schemas/categories.schema';
+import { MenuItem, MenuItemDocument } from '../../schemas/menu_items.schema';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
@@ -15,6 +16,8 @@ export class CategoryService extends BaseCrudService<
   constructor(
     @InjectModel(Category.name)
     categoryModel: Model<CategoryDocument>,
+    @InjectModel(MenuItem.name)
+    private readonly menuItemModel: Model<MenuItemDocument>,
   ) {
     super(categoryModel, {
       resourceName: 'Danh mục',
@@ -47,5 +50,16 @@ export class CategoryService extends BaseCrudService<
         ? { description: dto.description.trim() }
         : {}),
     };
+  }
+
+  protected async beforeDelete(category: CategoryDocument): Promise<void> {
+    const hasMenuItem = await this.menuItemModel
+      .exists({ categoryId: category._id })
+      .exec();
+    if (hasMenuItem) {
+      throw new ConflictException(
+        `Không thể xóa danh mục '${category.name}' vì vẫn còn món ăn liên quan`,
+      );
+    }
   }
 }
