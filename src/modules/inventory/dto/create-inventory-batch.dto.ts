@@ -1,8 +1,10 @@
 import {
   IsDateString,
+  IsInt,
   IsMongoId,
   IsNotEmpty,
   IsNumber,
+  Max,
   IsOptional,
   IsString,
   Min,
@@ -26,8 +28,9 @@ export class CreateInventoryBatchDto {
   expiryDate: string;
 
   @IsNotEmpty({ message: 'Giá nhập không được để trống' })
-  @IsNumber({}, { message: 'Giá nhập phải là số' })
+  @IsInt({ message: 'Giá nhập phải là số nguyên VND' })
   @Min(0, { message: 'Giá nhập phải lớn hơn hoặc bằng 0' })
+  @Max(Number.MAX_SAFE_INTEGER, { message: 'Giá nhập vượt giới hạn hỗ trợ' })
   costPrice: number;
 
   @IsOptional()

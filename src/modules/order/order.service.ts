@@ -77,6 +77,11 @@ export class OrderService {
       );
 
       const unitPrice = menuItem.price;
+      if (!Number.isSafeInteger(unitPrice) || unitPrice < 0) {
+        throw new ConflictException(
+          `Giá món '${menuItem.name}' không phải số nguyên VND hợp lệ`,
+        );
+      }
       itemPriceInfos.push({
         unitPrice,
         quantity: itemDto.quantity,
@@ -101,6 +106,22 @@ export class OrderService {
         dailySubsidyAmount: userRole === 'user' || userRole === 'vip' ? 0 : 0,
       },
     );
+    if (
+      !Number.isSafeInteger(discountResult.rawTotal) ||
+      !Number.isSafeInteger(discountResult.totalDiscount) ||
+      !Number.isSafeInteger(discountResult.finalAmount)
+    ) {
+      throw new ConflictException(
+        'Tổng tiền đơn hàng không phải số nguyên VND an toàn',
+      );
+    }
+
+    const paymentMethod = dto.paymentMethod ?? 'CASH';
+    if (paymentMethod === 'VIETQR' && discountResult.finalAmount === 0) {
+      throw new BadRequestException(
+        'Đơn hàng 0 đồng không cần và không thể thanh toán bằng VIETQR',
+      );
+    }
 
     const count = await this.orderModel.countDocuments().exec();
     const orderNumber = `#${1001 + count}`;
@@ -117,7 +138,7 @@ export class OrderService {
       status: 'CREATED',
       priorityScore: 0,
       paymentStatus: 'PENDING',
-      paymentMethod: dto.paymentMethod || 'CASH',
+      paymentMethod,
     });
 
     return await newOrder.save();

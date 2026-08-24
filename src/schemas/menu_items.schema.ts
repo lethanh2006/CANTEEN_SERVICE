@@ -8,7 +8,13 @@ export class MenuItemOption {
   @Prop({ required: true })
   name!: string;
 
-  @Prop({ required: true, default: 0 })
+  @Prop({
+    required: true,
+    default: 0,
+    min: 0,
+    max: Number.MAX_SAFE_INTEGER,
+    validate: Number.isSafeInteger,
+  })
   price!: number;
 }
 
@@ -29,7 +35,12 @@ export class MenuItem {
   @Prop({ required: false })
   description!: string;
 
-  @Prop({ required: true, min: 0 })
+  @Prop({
+    required: true,
+    min: 0,
+    max: Number.MAX_SAFE_INTEGER,
+    validate: Number.isSafeInteger,
+  })
   price!: number;
 
   @Prop({ required: false })

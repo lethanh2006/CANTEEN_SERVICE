@@ -1,8 +1,9 @@
 import {
   IsArray,
   IsBoolean,
+  IsInt,
   IsMongoId,
-  IsNumber,
+  Max,
   IsOptional,
   IsString,
   Min,
@@ -25,8 +26,9 @@ export class UpdateMenuItemDto {
   description?: string;
 
   @IsOptional()
-  @IsNumber({}, { message: 'Giá món ăn phải là số' })
+  @IsInt({ message: 'Giá món ăn phải là số nguyên VND' })
   @Min(0, { message: 'Giá món ăn phải lớn hơn hoặc bằng 0' })
+  @Max(Number.MAX_SAFE_INTEGER, { message: 'Giá món ăn vượt giới hạn hỗ trợ' })
   price?: number;
 
   @IsOptional()

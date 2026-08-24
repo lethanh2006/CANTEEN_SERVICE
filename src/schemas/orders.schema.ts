@@ -8,7 +8,13 @@ export class SelectedOption {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ required: true, default: 0 })
+  @Prop({
+    required: true,
+    default: 0,
+    min: 0,
+    max: Number.MAX_SAFE_INTEGER,
+    validate: Number.isSafeInteger,
+  })
   price: number;
 }
 
@@ -26,10 +32,21 @@ export class OrderItem {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ required: true, min: 1, default: 1 })
+  @Prop({
+    required: true,
+    min: 1,
+    max: Number.MAX_SAFE_INTEGER,
+    default: 1,
+    validate: Number.isSafeInteger,
+  })
   quantity: number;
 
-  @Prop({ required: true, min: 0 })
+  @Prop({
+    required: true,
+    min: 0,
+    max: Number.MAX_SAFE_INTEGER,
+    validate: Number.isSafeInteger,
+  })
   unitPrice: number;
 
   @Prop({ type: [SelectedOptionSchema], default: [] })
@@ -66,13 +83,29 @@ export class Order {
   @Prop({ type: [OrderItemSchema], required: true })
   items: OrderItem[];
 
-  @Prop({ required: true, min: 0 })
+  @Prop({
+    required: true,
+    min: 0,
+    max: Number.MAX_SAFE_INTEGER,
+    validate: Number.isSafeInteger,
+  })
   totalAmount: number;
 
-  @Prop({ required: true, default: 0, min: 0 })
+  @Prop({
+    required: true,
+    default: 0,
+    min: 0,
+    max: Number.MAX_SAFE_INTEGER,
+    validate: Number.isSafeInteger,
+  })
   discountAmount: number;
 
-  @Prop({ required: true, min: 0 })
+  @Prop({
+    required: true,
+    min: 0,
+    max: Number.MAX_SAFE_INTEGER,
+    validate: Number.isSafeInteger,
+  })
   finalAmount: number;
 
   @Prop({

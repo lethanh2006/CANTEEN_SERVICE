@@ -1,9 +1,10 @@
 import {
   IsArray,
   IsEnum,
+  IsInt,
   IsMongoId,
   IsNotEmpty,
-  IsNumber,
+  Max,
   IsOptional,
   IsString,
   Min,
@@ -16,10 +17,13 @@ export class OrderSelectedOptionDto {
   @IsString({ message: 'Tên tùy chọn phải là chuỗi ký tự' })
   name!: string;
 
-  @IsNotEmpty({ message: 'Giá tùy chọn không được để trống' })
-  @IsNumber({}, { message: 'Giá tùy chọn phải là số' })
+  @IsOptional()
+  @IsInt({ message: 'Giá tùy chọn phải là số nguyên VND' })
   @Min(0, { message: 'Giá tùy chọn phải lớn hơn hoặc bằng 0' })
-  price!: number;
+  @Max(Number.MAX_SAFE_INTEGER, {
+    message: 'Giá tùy chọn vượt giới hạn hỗ trợ',
+  })
+  price?: number;
 }
 
 export class CreateOrderItemDto {
@@ -28,8 +32,9 @@ export class CreateOrderItemDto {
   menuItemId!: string;
 
   @IsNotEmpty({ message: 'Số lượng không được để trống' })
-  @IsNumber({}, { message: 'Số lượng phải là số' })
+  @IsInt({ message: 'Số lượng phải là số nguyên' })
   @Min(1, { message: 'Số lượng phải lớn hơn hoặc bằng 1' })
+  @Max(Number.MAX_SAFE_INTEGER, { message: 'Số lượng vượt giới hạn hỗ trợ' })
   quantity!: number;
 
   @IsOptional()
