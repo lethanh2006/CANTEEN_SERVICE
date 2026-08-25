@@ -5,8 +5,8 @@ dns.setServers(['8.8.8.8', '8.8.4.4']);
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import {
+  flushLoggerAndShutdownTelemetry,
   logAndRecordException,
-  shutdownTelemetry,
 } from '@nrapp/observability';
 import { AppModule } from './app.module';
 import { appLogger, nestLogger } from './common/observability/app-logger';
@@ -42,7 +42,6 @@ void bootstrap().catch(async (error: unknown) => {
       },
     },
   );
-  appLogger.flush();
-  await shutdownTelemetry(3_000);
+  await flushLoggerAndShutdownTelemetry(appLogger, 3_000);
   process.exitCode = 1;
 });
