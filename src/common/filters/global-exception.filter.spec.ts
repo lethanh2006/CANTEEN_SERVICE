@@ -70,7 +70,7 @@ function httpHost(requestId: string): ArgumentsHost {
     method: 'POST',
     baseUrl: '/api/canteen',
     route: { path: '/orders' },
-    requestContext: { requestId, startedAt: 0n },
+    requestContext: { requestId },
   };
   return {
     switchToHttp: () => ({
