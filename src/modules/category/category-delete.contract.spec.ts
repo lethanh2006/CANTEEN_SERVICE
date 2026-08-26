@@ -18,7 +18,9 @@ describe('Xóa danh mục căn tin', () => {
       exists: jest.fn(() => ({
         exec: jest
           .fn()
-          .mockResolvedValue(hasMenuItem ? { _id: new Types.ObjectId() } : null),
+          .mockResolvedValue(
+            hasMenuItem ? { _id: new Types.ObjectId() } : null,
+          ),
       })),
     };
 
@@ -36,9 +38,9 @@ describe('Xóa danh mục căn tin', () => {
   it('chặn xóa danh mục vẫn còn món ăn', async () => {
     const { category, menuItemModel, service } = createService(true);
 
-    await expect(service.delete(category._id.toString())).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(
+      service.delete(category._id.toString()),
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(menuItemModel.exists).toHaveBeenCalledWith({
       categoryId: category._id,
     });
