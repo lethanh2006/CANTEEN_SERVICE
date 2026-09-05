@@ -7,6 +7,7 @@ import { OrderService } from './order.service';
 describe('Tạo đơn hàng nhất quán', () => {
   const userId = new Types.ObjectId().toString();
   const menuItemId = new Types.ObjectId();
+  const categoryId = new Types.ObjectId();
   const tableId = new Types.ObjectId();
 
   function createHarness(options?: {
@@ -16,9 +17,11 @@ describe('Tạo đơn hàng nhất quán', () => {
     existingTable?: Record<string, unknown> | null;
     saveError?: Error;
     unsettledOrder?: object | null;
+    activeCategory?: boolean;
   }) {
     const menuItem = {
       _id: menuItemId,
+      categoryId,
       name: 'Cơm trưa',
       price: 35_000,
       isAvailable: true,
@@ -27,6 +30,15 @@ describe('Tạo đơn hàng nhất quán', () => {
     const menuItemModel = {
       findById: jest.fn(() => ({
         exec: jest.fn().mockResolvedValue(menuItem),
+      })),
+    };
+    const categoryModel = {
+      exists: jest.fn(() => ({
+        exec: jest
+          .fn()
+          .mockResolvedValue(
+            options?.activeCategory === false ? null : { _id: categoryId },
+          ),
       })),
     };
 
@@ -96,6 +108,7 @@ describe('Tạo đơn hàng nhất quán', () => {
     const service = new OrderService(
       orderModel as never,
       menuItemModel as never,
+      categoryModel as never,
       {} as never,
       {} as never,
       tableModel as never,
@@ -115,9 +128,21 @@ describe('Tạo đơn hàng nhất quán', () => {
       exists,
       orderCounterModel,
       tableModel,
+      categoryModel,
       savedTableIds,
     };
   }
+
+  it('từ chối món thuộc danh mục đang ẩn', async () => {
+    const { service, dto, orderModel } = createHarness({
+      activeCategory: false,
+    });
+
+    await expect(
+      service.createOrder(dto, { _id: userId, role: 'user' }),
+    ).rejects.toThrow("Danh mục của món 'Cơm trưa' đang tạm ẩn");
+    expect(orderModel).not.toHaveBeenCalled();
+  });
 
   it('cấp orderNumber bằng phép tăng counter nguyên tử', async () => {
     const { service, dto, orderModel, countDocuments, orderCounterModel } =

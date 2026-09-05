@@ -11,12 +11,14 @@ import {
   OrderCounter,
   OrderCounterSchema,
 } from '../../schemas/order-counter.schema';
+import { Category, CategorySchema } from '../../schemas/categories.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
       { name: MenuItem.name, schema: MenuItemSchema },
+      { name: Category.name, schema: CategorySchema },
       { name: Table.name, schema: TableSchema },
       { name: OrderCounter.name, schema: OrderCounterSchema },
     ]),

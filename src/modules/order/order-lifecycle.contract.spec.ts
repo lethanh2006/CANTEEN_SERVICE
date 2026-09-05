@@ -34,6 +34,7 @@ describe('Vòng đời đơn hàng căn tin', () => {
       service: new OrderService(
         orderModel as never,
         {} as never,
+        {} as never,
         settlement as never,
         rabbitMQ as never,
         {} as never,

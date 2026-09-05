@@ -28,7 +28,13 @@ export class MenuService {
    */
   async searchMenuItems(query: string): Promise<MenuItem[]> {
     const keyword = query?.trim();
-    const filter: Record<string, unknown> = { isAvailable: true };
+    const activeCategoryIds = await this.categoryModel
+      .distinct('_id', { isActive: true })
+      .exec();
+    const filter: Record<string, unknown> = {
+      isAvailable: true,
+      categoryId: { $in: activeCategoryIds },
+    };
     if (keyword) {
       filter.name = {
         $regex: keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),

@@ -12,6 +12,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter, Types } from 'mongoose';
 import { Order, OrderDocument, OrderItem } from '../../schemas/orders.schema';
 import { MenuItem, MenuItemDocument } from '../../schemas/menu_items.schema';
+import { Category, CategoryDocument } from '../../schemas/categories.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
 import {
   OrderDiscountCalculator,
@@ -42,6 +43,8 @@ export class OrderService {
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     @InjectModel(MenuItem.name)
     private readonly menuItemModel: Model<MenuItemDocument>,
+    @InjectModel(Category.name)
+    private readonly categoryModel: Model<CategoryDocument>,
     private readonly orderSettlementService: OrderSettlementService,
     private readonly rabbitMQService: RabbitMQService,
     @InjectModel(Table.name)
@@ -86,6 +89,15 @@ export class OrderService {
       if (menuItem.isAvailable === false) {
         throw new ConflictException(
           `Món ăn '${menuItem.name}' tạm thời ngưng phục vụ`,
+        );
+      }
+
+      const activeCategory = await this.categoryModel
+        .exists({ _id: menuItem.categoryId, isActive: true })
+        .exec();
+      if (!activeCategory) {
+        throw new ConflictException(
+          `Danh mục của món '${menuItem.name}' đang tạm ẩn`,
         );
       }
 

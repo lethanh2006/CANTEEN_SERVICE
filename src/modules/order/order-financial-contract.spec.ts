@@ -6,6 +6,12 @@ import { CreateOrderDto, CreateOrderItemDto } from './dto/create-order.dto';
 import { OrderService } from './order.service';
 
 describe('Hợp đồng tiền và số lượng của đơn hàng', () => {
+  const createActiveCategoryModel = () => ({
+    exists: jest.fn(() => ({
+      exec: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
+    })),
+  });
+
   it('từ chối giá VND và số lượng món dạng thập phân', () => {
     const menuItem = Object.assign(new CreateMenuItemDto(), {
       categoryId: new Types.ObjectId().toString(),
@@ -24,6 +30,7 @@ describe('Hợp đồng tiền và số lượng của đơn hàng', () => {
   it('từ chối VIETQR cho đơn hàng 0 đồng', async () => {
     const menuItem = {
       _id: new Types.ObjectId(),
+      categoryId: new Types.ObjectId(),
       name: 'Món miễn phí',
       price: 0,
       isAvailable: true,
@@ -37,6 +44,7 @@ describe('Hợp đồng tiền và số lượng của đơn hàng', () => {
     const service = new OrderService(
       {} as never,
       menuItemModel as never,
+      createActiveCategoryModel() as never,
       {} as never,
       {} as never,
       {} as never,
@@ -60,6 +68,7 @@ describe('Hợp đồng tiền và số lượng của đơn hàng', () => {
   it('từ chối tổng tiền vượt miền số nguyên an toàn', async () => {
     const menuItem = {
       _id: new Types.ObjectId(),
+      categoryId: new Types.ObjectId(),
       name: 'Món giá lớn',
       price: Number.MAX_SAFE_INTEGER,
       isAvailable: true,
@@ -73,6 +82,7 @@ describe('Hợp đồng tiền và số lượng của đơn hàng', () => {
     const service = new OrderService(
       {} as never,
       menuItemModel as never,
+      createActiveCategoryModel() as never,
       {} as never,
       {} as never,
       {} as never,
