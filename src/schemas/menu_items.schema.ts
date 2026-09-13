@@ -54,3 +54,6 @@ export class MenuItem {
 }
 
 export const MenuItemSchema = SchemaFactory.createForClass(MenuItem);
+
+// Lọc món theo danh mục/trạng thái bán; prefix categoryId phục vụ kiểm tra xóa.
+MenuItemSchema.index({ categoryId: 1, isAvailable: 1 });

@@ -95,7 +95,10 @@ export class InventoryService {
         expiryDate: { $gt: now },
       })
       .sort({ expiryDate: 1 })
-      .populate<{ ingredientId: IngredientDocument }>('ingredientId')
+      .populate<{ ingredientId: IngredientDocument }>(
+        'ingredientId',
+        'name unit',
+      )
       .exec();
 
     return batches.map((batch) => {
@@ -158,12 +161,15 @@ export class InventoryService {
             .exec();
 
           const activeBatches = await this.batchModel
-            .find({
-              ingredientId,
-              status: 'ACTIVE',
-              quantity: { $gt: 0 },
-              expiryDate: { $gt: now },
-            })
+            .find(
+              {
+                ingredientId,
+                status: 'ACTIVE',
+                quantity: { $gt: 0 },
+                expiryDate: { $gt: now },
+              },
+              { expiryDate: 1, quantity: 1 },
+            )
             .sort({ expiryDate: 1, _id: 1 })
             .session(session)
             .exec();

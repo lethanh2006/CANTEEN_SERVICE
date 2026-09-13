@@ -76,10 +76,37 @@ export class OrderService {
     const orderItems: OrderItem[] = [];
     const itemPriceInfos: OrderItemPriceInfo[] = [];
 
+    // Đọc món và danh mục theo lô, không truy vấn lại theo từng dòng giỏ hàng.
+    const menuItemIds = [
+      ...new Set(
+        dto.items.map((item) =>
+          new Types.ObjectId(item.menuItemId).toHexString(),
+        ),
+      ),
+    ].map((id) => new Types.ObjectId(id));
+    const menuItems = await this.menuItemModel
+      .find({ _id: { $in: menuItemIds } })
+      .exec();
+    const menuItemsById = new Map(
+      menuItems.map((item) => [item._id.toString(), item]),
+    );
+    const categoryIds = [
+      ...new Map(
+        menuItems.map((item) => [item.categoryId.toString(), item.categoryId]),
+      ).values(),
+    ];
+    const activeCategoryIds =
+      categoryIds.length > 0
+        ? await this.categoryModel
+            .distinct('_id', { _id: { $in: categoryIds }, isActive: true })
+            .exec()
+        : [];
+    const activeCategories = new Set(
+      activeCategoryIds.map((id) => id.toString()),
+    );
+
     for (const itemDto of dto.items) {
-      const menuItem = await this.menuItemModel
-        .findById(itemDto.menuItemId)
-        .exec();
+      const menuItem = menuItemsById.get(itemDto.menuItemId.toLowerCase());
       if (!menuItem) {
         throw new NotFoundException(
           `Món ăn với ID '${itemDto.menuItemId}' không tồn tại`,
@@ -92,10 +119,7 @@ export class OrderService {
         );
       }
 
-      const activeCategory = await this.categoryModel
-        .exists({ _id: menuItem.categoryId, isActive: true })
-        .exec();
-      if (!activeCategory) {
+      if (!activeCategories.has(menuItem.categoryId.toString())) {
         throw new ConflictException(
           `Danh mục của món '${menuItem.name}' đang tạm ẩn`,
         );
@@ -137,7 +161,7 @@ export class OrderService {
       itemPriceInfos,
       {
         // Khoản trợ cấp có thể được cấu hình theo chính sách doanh nghiệp.
-        dailySubsidyAmount: userRole === 'user' || userRole === 'vip' ? 0 : 0,
+        dailySubsidyAmount: 0,
       },
     );
     if (
@@ -191,9 +215,8 @@ export class OrderService {
   }
 
   /**
-   * Cấp số đơn hàng bằng một document counter duy nhất. Khi nâng cấp từ dữ
-   * liệu cũ, counter được seed từ orderNumber lớn nhất để không đụng unique
-   * index hiện có.
+   * Cấp số đơn hàng bằng document counter. Khi nâng cấp từ dữ liệu cũ,
+   * counter được seed từ orderNumber lớn nhất để tiếp tục dãy số đơn hàng.
    */
   private async nextOrderNumber(): Promise<string> {
     const incrementExisting = () =>
@@ -222,7 +245,7 @@ export class OrderService {
                 },
               },
             ],
-            { new: true, upsert: true },
+            { new: true, upsert: true, updatePipeline: true },
           )
           .exec();
       } catch (error) {
@@ -429,7 +452,7 @@ export class OrderService {
 
     return await this.orderModel
       .find({ userId: new Types.ObjectId(rawUserId) })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .exec();
   }
 
@@ -461,11 +484,16 @@ export class OrderService {
     const [orders, total] = await Promise.all([
       this.orderModel
         .find(filter)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .exec(),
-      this.orderModel.countDocuments(filter).exec(),
+      this.orderModel
+        .countDocuments(
+          filter,
+          Object.keys(filter).length === 0 ? { hint: '_id_' } : {},
+        )
+        .exec(),
     ]);
 
     return {

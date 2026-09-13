@@ -8,7 +8,7 @@ export type OrderCounterDocument = OrderCounter & Document;
 @Schema({ timestamps: true, collection: 'counters' })
 export class OrderCounter {
   @Prop({ required: true, unique: true })
-  key: string;
+  key!: string;
 
   @Prop({
     required: true,
@@ -16,7 +16,7 @@ export class OrderCounter {
     max: Number.MAX_SAFE_INTEGER,
     validate: Number.isSafeInteger,
   })
-  sequence: number;
+  sequence!: number;
 }
 
 export const OrderCounterSchema = SchemaFactory.createForClass(OrderCounter);

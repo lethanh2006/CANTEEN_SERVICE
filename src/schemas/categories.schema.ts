@@ -19,3 +19,6 @@ export class Category {
 }
 
 export const CategorySchema = SchemaFactory.createForClass(Category);
+
+// Thứ tự danh mục ở CRUD và menu quản trị/công khai.
+CategorySchema.index({ displayOrder: 1, name: 1 });

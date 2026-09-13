@@ -41,10 +41,15 @@ export class InventoryBatch {
 export const InventoryBatchSchema =
   SchemaFactory.createForClass(InventoryBatch);
 
-InventoryBatchSchema.index({ status: 1, expiryDate: 1, quantity: 1 });
+// Xuất kho FEFO, cập nhật lô hết hạn và kiểm tra lô theo nguyên liệu.
 InventoryBatchSchema.index({
   ingredientId: 1,
   status: 1,
   expiryDate: 1,
-  quantity: 1,
+  _id: 1,
 });
+// Cảnh báo chỉ lấy lô ACTIVE còn hàng; ngày hiện tại vẫn lọc tại truy vấn.
+InventoryBatchSchema.index(
+  { expiryDate: 1 },
+  { partialFilterExpression: { status: 'ACTIVE', quantity: { $gt: 0 } } },
+);

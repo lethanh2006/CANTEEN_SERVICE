@@ -6,9 +6,9 @@ import { CreateOrderDto, CreateOrderItemDto } from './dto/create-order.dto';
 import { OrderService } from './order.service';
 
 describe('Hợp đồng tiền và số lượng của đơn hàng', () => {
-  const createActiveCategoryModel = () => ({
-    exists: jest.fn(() => ({
-      exec: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
+  const createActiveCategoryModel = (categoryId: Types.ObjectId) => ({
+    distinct: jest.fn(() => ({
+      exec: jest.fn().mockResolvedValue([categoryId]),
     })),
   });
 
@@ -37,14 +37,14 @@ describe('Hợp đồng tiền và số lượng của đơn hàng', () => {
       options: [],
     };
     const menuItemModel = {
-      findById: jest.fn(() => ({
-        exec: jest.fn().mockResolvedValue(menuItem),
+      find: jest.fn(() => ({
+        exec: jest.fn().mockResolvedValue([menuItem]),
       })),
     };
     const service = new OrderService(
       {} as never,
       menuItemModel as never,
-      createActiveCategoryModel() as never,
+      createActiveCategoryModel(menuItem.categoryId) as never,
       {} as never,
       {} as never,
       {} as never,
@@ -75,14 +75,14 @@ describe('Hợp đồng tiền và số lượng của đơn hàng', () => {
       options: [],
     };
     const menuItemModel = {
-      findById: jest.fn(() => ({
-        exec: jest.fn().mockResolvedValue(menuItem),
+      find: jest.fn(() => ({
+        exec: jest.fn().mockResolvedValue([menuItem]),
       })),
     };
     const service = new OrderService(
       {} as never,
       menuItemModel as never,
-      createActiveCategoryModel() as never,
+      createActiveCategoryModel(menuItem.categoryId) as never,
       {} as never,
       {} as never,
       {} as never,

@@ -35,7 +35,12 @@ export abstract class BaseCrudService<
         .skip((page - 1) * limit)
         .limit(limit)
         .exec(),
-      this.model.countDocuments(filter).exec(),
+      this.model
+        .countDocuments(
+          filter,
+          Object.keys(filter).length === 0 ? { hint: '_id_' } : {},
+        )
+        .exec(),
     ]);
 
     return {

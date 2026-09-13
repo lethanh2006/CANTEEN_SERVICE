@@ -1,6 +1,9 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { Types } from 'mongoose';
-import { ORDER_NUMBER_COUNTER_KEY } from '../../schemas/order-counter.schema';
+import { Mongoose, Types } from 'mongoose';
+import {
+  ORDER_NUMBER_COUNTER_KEY,
+  OrderCounterSchema,
+} from '../../schemas/order-counter.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderService } from './order.service';
 
@@ -18,6 +21,14 @@ describe('Tạo đơn hàng nhất quán', () => {
     saveError?: Error;
     unsettledOrder?: object | null;
     activeCategory?: boolean;
+    menuItems?: Array<{
+      _id: Types.ObjectId;
+      categoryId: Types.ObjectId;
+      name: string;
+      price: number;
+      isAvailable: boolean;
+      options: Array<{ name: string; price: number }>;
+    }>;
   }) {
     const menuItem = {
       _id: menuItemId,
@@ -28,16 +39,16 @@ describe('Tạo đơn hàng nhất quán', () => {
       options: [],
     };
     const menuItemModel = {
-      findById: jest.fn(() => ({
-        exec: jest.fn().mockResolvedValue(menuItem),
+      find: jest.fn(() => ({
+        exec: jest.fn().mockResolvedValue(options?.menuItems ?? [menuItem]),
       })),
     };
     const categoryModel = {
-      exists: jest.fn(() => ({
+      distinct: jest.fn(() => ({
         exec: jest
           .fn()
           .mockResolvedValue(
-            options?.activeCategory === false ? null : { _id: categoryId },
+            options?.activeCategory === false ? [] : [categoryId],
           ),
       })),
     };
@@ -129,6 +140,7 @@ describe('Tạo đơn hàng nhất quán', () => {
       orderCounterModel,
       tableModel,
       categoryModel,
+      menuItemModel,
       savedTableIds,
     };
   }
@@ -141,6 +153,94 @@ describe('Tạo đơn hàng nhất quán', () => {
     await expect(
       service.createOrder(dto, { _id: userId, role: 'user' }),
     ).rejects.toThrow("Danh mục của món 'Cơm trưa' đang tạm ẩn");
+    expect(orderModel).not.toHaveBeenCalled();
+  });
+
+  it('đọc giỏ hàng theo lô, giữ từng dòng món và giá option từ database', async () => {
+    const secondItemId = new Types.ObjectId();
+    const menuItems = [
+      {
+        _id: menuItemId,
+        categoryId,
+        name: 'Cơm trưa',
+        price: 35_000,
+        isAvailable: true,
+        options: [{ name: 'Thêm trứng', price: 5_000 }],
+      },
+      {
+        _id: secondItemId,
+        categoryId,
+        name: 'Nước',
+        price: 10_000,
+        isAvailable: true,
+        options: [],
+      },
+    ];
+    const { service, dto, menuItemModel, categoryModel } = createHarness({
+      menuItems,
+    });
+    dto.items = [
+      { menuItemId: secondItemId.toString(), quantity: 1 },
+      {
+        menuItemId: menuItemId.toString().toUpperCase(),
+        quantity: 2,
+        selectedOptions: [{ name: 'Thêm trứng', price: 1 }],
+      },
+      { menuItemId: menuItemId.toString(), quantity: 1, note: 'Không hành' },
+    ];
+
+    const order = await service.createOrder(dto, { _id: userId });
+
+    expect(menuItemModel.find).toHaveBeenCalledTimes(1);
+    expect(menuItemModel.find).toHaveBeenCalledWith({
+      _id: { $in: [secondItemId, menuItemId] },
+    });
+    expect(categoryModel.distinct).toHaveBeenCalledTimes(1);
+    expect(categoryModel.distinct).toHaveBeenCalledWith('_id', {
+      _id: { $in: [categoryId] },
+      isActive: true,
+    });
+    expect(order.items.map((item) => item.menuItemId)).toEqual([
+      secondItemId,
+      menuItemId,
+      menuItemId,
+    ]);
+    expect(order.items[1].selectedOptions).toEqual([
+      { name: 'Thêm trứng', price: 5_000 },
+    ]);
+    expect(order.items[2].note).toBe('Không hành');
+    expect(order.totalAmount).toBe(125_000);
+  });
+
+  it('từ chối món đã xóa và không truy vấn danh mục khi không tìm được món', async () => {
+    const { service, dto, orderModel, categoryModel } = createHarness({
+      menuItems: [],
+    });
+
+    await expect(service.createOrder(dto, { _id: userId })).rejects.toThrow(
+      'không tồn tại',
+    );
+    expect(categoryModel.distinct).not.toHaveBeenCalled();
+    expect(orderModel).not.toHaveBeenCalled();
+  });
+
+  it('từ chối món tạm ngưng bán sau khi đọc theo lô', async () => {
+    const { service, dto, orderModel } = createHarness({
+      menuItems: [
+        {
+          _id: menuItemId,
+          categoryId,
+          name: 'Cơm trưa',
+          price: 35_000,
+          isAvailable: false,
+          options: [],
+        },
+      ],
+    });
+
+    await expect(service.createOrder(dto, { _id: userId })).rejects.toThrow(
+      'tạm thời ngưng phục vụ',
+    );
     expect(orderModel).not.toHaveBeenCalled();
   });
 
@@ -184,12 +284,50 @@ describe('Tạo đơn hàng nhất quán', () => {
           },
         },
       ],
-      { new: true, upsert: true },
+      { new: true, upsert: true, updatePipeline: true },
     );
     expect(orderModel).toHaveBeenCalledWith(
       expect.objectContaining({ orderNumber: '#1043' }),
     );
   });
+
+  it.each([1000, 1042])(
+    'khởi tạo counter qua Mongoose thật với seed %i',
+    async (seed) => {
+      const harness = createHarness({ legacySequence: seed });
+      const mongoose = new Mongoose();
+      const counterModel = mongoose.model('OrderCounter', OrderCounterSchema);
+      // Chỉ giả lập MongoDB I/O để Mongoose vẫn kiểm tra query và options.
+      const update = jest
+        .spyOn(counterModel.collection, 'findOneAndUpdate')
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          _id: new Types.ObjectId(),
+          key: ORDER_NUMBER_COUNTER_KEY,
+          sequence: seed + 1,
+        });
+      const service = new OrderService(
+        harness.orderModel as never,
+        harness.menuItemModel as never,
+        harness.categoryModel as never,
+        {} as never,
+        {} as never,
+        harness.tableModel as never,
+        counterModel as never,
+      );
+
+      try {
+        const order = await service.createOrder(harness.dto, { _id: userId });
+
+        expect(order.orderNumber).toBe(`#${seed + 1}`);
+        expect(update).toHaveBeenCalledTimes(2);
+        expect(harness.aggregate).toHaveBeenCalledTimes(1);
+      } finally {
+        update.mockRestore();
+        mongoose.deleteModel('OrderCounter');
+      }
+    },
+  );
 
   it('từ chối tableId không tồn tại trước khi cấp số và lưu đơn', async () => {
     const { service, dto, orderModel, orderCounterModel, tableModel } =

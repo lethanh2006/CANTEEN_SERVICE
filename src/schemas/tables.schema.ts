@@ -6,20 +6,20 @@ export type TableDocument = Table & Document;
 @Schema({ timestamps: true })
 export class Table {
   @Prop({ required: true, unique: true, trim: true })
-  name: string;
+  name!: string;
 
   @Prop({ required: true })
-  qrCodeUrl: string;
+  qrCodeUrl!: string;
 
   @Prop({ required: true, default: 4 })
-  capacity: number;
+  capacity!: number;
 
   @Prop({
     required: true,
     enum: ['empty', 'occupied', 'reserved'],
     default: 'empty',
   })
-  status: string;
+  status!: string;
 }
 
 export const TableSchema = SchemaFactory.createForClass(Table);

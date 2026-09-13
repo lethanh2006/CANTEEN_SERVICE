@@ -31,6 +31,7 @@ export class MenuService {
     const activeCategoryIds = await this.categoryModel
       .distinct('_id', { isActive: true })
       .exec();
+    if (activeCategoryIds.length === 0) return [];
     const filter: Record<string, unknown> = {
       isAvailable: true,
       categoryId: { $in: activeCategoryIds },
@@ -54,19 +55,28 @@ export class MenuService {
       .sort({ displayOrder: 1 })
       .exec();
 
+    if (categories.length === 0) return [];
+
     const menuItems = await this.menuItemModel
-      .find({ isAvailable: true })
+      .find({
+        categoryId: { $in: categories.map((category) => category._id) },
+        isAvailable: true,
+      })
       .exec();
 
-    return categories.map((category) => {
-      const items = menuItems.filter(
-        (item) => item.categoryId.toString() === category._id.toString(),
-      );
-      return {
-        category,
-        items,
-      };
-    });
+    // Nhóm một lần thay vì duyệt lại toàn bộ món cho từng danh mục.
+    const itemsByCategory = new Map<string, MenuItemDocument[]>();
+    for (const item of menuItems) {
+      const categoryId = item.categoryId.toString();
+      const items = itemsByCategory.get(categoryId);
+      if (items) items.push(item);
+      else itemsByCategory.set(categoryId, [item]);
+    }
+
+    return categories.map((category) => ({
+      category,
+      items: itemsByCategory.get(category._id.toString()) ?? [],
+    }));
   }
 
   /**
@@ -92,7 +102,7 @@ export class MenuService {
     userId = 'system',
   ): Promise<MenuItem> {
     const categoryExists = await this.categoryModel
-      .findById(dto.categoryId)
+      .exists({ _id: dto.categoryId })
       .exec();
     if (!categoryExists) {
       throw new NotFoundException(
@@ -101,7 +111,7 @@ export class MenuService {
     }
 
     const existingMenuItem = await this.menuItemModel
-      .findOne({ name: dto.name.trim() })
+      .exists({ name: dto.name.trim() })
       .exec();
     if (existingMenuItem) {
       throw new ConflictException(`Món ăn có tên '${dto.name}' đã tồn tại`);
@@ -140,7 +150,7 @@ export class MenuService {
 
     if (dto.categoryId) {
       const categoryExists = await this.categoryModel
-        .findById(dto.categoryId)
+        .exists({ _id: dto.categoryId })
         .exec();
       if (!categoryExists) {
         throw new NotFoundException(
@@ -153,7 +163,7 @@ export class MenuService {
       const trimmedName = dto.name.trim();
       if (trimmedName !== menuItem.name) {
         const existing = await this.menuItemModel
-          .findOne({ name: trimmedName })
+          .exists({ name: trimmedName })
           .exec();
         if (existing) {
           throw new ConflictException(

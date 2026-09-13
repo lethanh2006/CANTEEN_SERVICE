@@ -6,7 +6,7 @@ export type OrderDocument = Order & Document;
 @Schema({ _id: false })
 export class SelectedOption {
   @Prop({ required: true })
-  name: string;
+  name!: string;
 
   @Prop({
     required: true,
@@ -15,7 +15,7 @@ export class SelectedOption {
     max: Number.MAX_SAFE_INTEGER,
     validate: Number.isSafeInteger,
   })
-  price: number;
+  price!: number;
 }
 
 const SelectedOptionSchema = SchemaFactory.createForClass(SelectedOption);
@@ -27,10 +27,10 @@ export class OrderItem {
     ref: 'MenuItem',
     required: true,
   })
-  menuItemId: Types.ObjectId;
+  menuItemId!: Types.ObjectId;
 
   @Prop({ required: true })
-  name: string;
+  name!: string;
 
   @Prop({
     required: true,
@@ -39,7 +39,7 @@ export class OrderItem {
     default: 1,
     validate: Number.isSafeInteger,
   })
-  quantity: number;
+  quantity!: number;
 
   @Prop({
     required: true,
@@ -47,30 +47,30 @@ export class OrderItem {
     max: Number.MAX_SAFE_INTEGER,
     validate: Number.isSafeInteger,
   })
-  unitPrice: number;
+  unitPrice!: number;
 
   @Prop({ type: [SelectedOptionSchema], default: [] })
-  selectedOptions: SelectedOption[];
+  selectedOptions!: SelectedOption[];
 
   @Prop({ required: false })
-  note: string;
+  note!: string;
 }
 
 const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
 
 @Schema({ timestamps: true })
 export class Order {
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt!: Date;
+  updatedAt!: Date;
 
   @Prop({ required: true, unique: true })
-  orderNumber: string;
+  orderNumber!: string;
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, required: true })
-  userId: Types.ObjectId;
+  userId!: Types.ObjectId;
 
   @Prop({ required: true, default: 'user' }) // 'user' | 'manager' | 'vip'
-  userRole: string;
+  userRole!: string;
 
   @Prop({
     type: mongoose.Schema.Types.ObjectId,
@@ -78,10 +78,10 @@ export class Order {
     required: false,
     default: null,
   })
-  tableId: Types.ObjectId | null;
+  tableId!: Types.ObjectId | null;
 
   @Prop({ type: [OrderItemSchema], required: true })
-  items: OrderItem[];
+  items!: OrderItem[];
 
   @Prop({
     required: true,
@@ -89,7 +89,7 @@ export class Order {
     max: Number.MAX_SAFE_INTEGER,
     validate: Number.isSafeInteger,
   })
-  totalAmount: number;
+  totalAmount!: number;
 
   @Prop({
     required: true,
@@ -98,7 +98,7 @@ export class Order {
     max: Number.MAX_SAFE_INTEGER,
     validate: Number.isSafeInteger,
   })
-  discountAmount: number;
+  discountAmount!: number;
 
   @Prop({
     required: true,
@@ -106,7 +106,7 @@ export class Order {
     max: Number.MAX_SAFE_INTEGER,
     validate: Number.isSafeInteger,
   })
-  finalAmount: number;
+  finalAmount!: number;
 
   @Prop({
     required: true,
@@ -121,32 +121,32 @@ export class Order {
     ],
     default: 'CREATED',
   })
-  status: string;
+  status!: string;
 
   @Prop({ required: true, default: 0 })
-  priorityScore: number;
+  priorityScore!: number;
 
   @Prop({
     required: true,
     enum: ['PENDING', 'PAID', 'REFUNDED'],
     default: 'PENDING',
   })
-  paymentStatus: string;
+  paymentStatus!: string;
 
   @Prop({
     required: true,
     enum: ['CASH', 'VNPAY', 'MOMO', 'VIETQR'],
     default: 'CASH',
   })
-  paymentMethod: string;
+  paymentMethod!: string;
 
-  @Prop({ required: false })
+  @Prop({ required: false, unique: true, sparse: true })
   paymentId?: string;
 
-  @Prop({ required: false })
+  @Prop({ required: false, unique: true, sparse: true })
   paymentEventId?: string;
 
-  @Prop({ required: false })
+  @Prop({ required: false, unique: true, sparse: true })
   providerTransactionId?: string;
 
   @Prop({ required: false })
@@ -167,8 +167,15 @@ export class Order {
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
 
-OrderSchema.index({ status: 1, priorityScore: -1, createdAt: 1 });
-OrderSchema.index({ userId: 1, createdAt: -1 });
-OrderSchema.index({ paymentId: 1 }, { unique: true, sparse: true });
-OrderSchema.index({ paymentEventId: 1 }, { unique: true, sparse: true });
-OrderSchema.index({ providerTransactionId: 1 }, { unique: true, sparse: true });
+// Danh sách vận hành; _id giữ thứ tự ổn định khi nhiều đơn cùng createdAt.
+OrderSchema.index({ createdAt: -1, _id: -1 });
+OrderSchema.index({ status: 1, createdAt: -1, _id: -1 });
+// Lịch sử cá nhân và danh sách lọc theo người đặt.
+OrderSchema.index({ userId: 1, createdAt: -1, _id: -1 });
+// Đối soát và hoàn tác trạng thái bàn chỉ cần xét các đơn cùng bàn.
+OrderSchema.index({ tableId: 1 });
+// Hàng đợi bếp chỉ đọc/nhận đơn CONFIRMED, không cần index cả lịch sử.
+OrderSchema.index(
+  { priorityScore: -1, createdAt: 1 },
+  { partialFilterExpression: { status: 'CONFIRMED' } },
+);

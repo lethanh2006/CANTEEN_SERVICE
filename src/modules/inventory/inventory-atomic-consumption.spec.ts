@@ -121,6 +121,7 @@ describe('InventoryService atomic consumption', () => {
         quantity: { $gt: 0 },
         expiryDate: { $gt: expect.any(Date) as Date },
       }),
+      { expiryDate: 1, quantity: 1 },
     );
     expect(batchModel.updateOne).toHaveBeenCalledWith(
       expect.objectContaining({
