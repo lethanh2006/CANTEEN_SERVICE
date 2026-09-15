@@ -11,7 +11,16 @@ describe('Vòng đời đơn hàng căn tin', () => {
   const operatorId = new Types.ObjectId();
 
   function createService(order: Record<string, any>) {
+    const session = {
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) =>
+        callback(),
+      ),
+      endSession: jest.fn().mockResolvedValue(undefined),
+    };
     const orderModel = {
+      db: {
+        startSession: jest.fn().mockResolvedValue(session),
+      },
       findById: jest.fn(() => ({
         exec: jest.fn().mockResolvedValue(order),
       })),
@@ -27,8 +36,8 @@ describe('Vòng đời đơn hàng căn tin', () => {
     const settlement = {
       reconcileTableForOrder: jest.fn().mockResolvedValue(undefined),
     };
-    const rabbitMQ = {
-      publish: jest.fn().mockResolvedValue(undefined),
+    const outbox = {
+      enqueue: jest.fn().mockResolvedValue(undefined),
     };
     return {
       service: new OrderService(
@@ -36,12 +45,13 @@ describe('Vòng đời đơn hàng căn tin', () => {
         {} as never,
         {} as never,
         settlement as never,
-        rabbitMQ as never,
+        outbox as never,
         {} as never,
         {} as never,
       ),
       orderModel,
-      rabbitMQ,
+      outbox,
+      session,
       settlement,
     };
   }
@@ -187,7 +197,7 @@ describe('Vòng đời đơn hàng căn tin', () => {
       orderNumber: 'ORD-TEST',
       tableId: null,
     };
-    const { service, orderModel, rabbitMQ } = createService(order);
+    const { service, orderModel, outbox, session } = createService(order);
 
     await expect(service.confirmOrder(order._id.toString())).resolves.toEqual(
       expect.objectContaining({ status: 'CONFIRMED' }),
@@ -199,12 +209,26 @@ describe('Vòng đời đơn hàng căn tin', () => {
         $or: [{ paymentMethod: 'CASH' }, { paymentStatus: 'PAID' }],
       },
       { $set: { status: 'CONFIRMED', priorityScore: 50 } },
-      { new: true, runValidators: true },
+      { returnDocument: 'after', runValidators: true, session },
     );
-    expect(rabbitMQ.publish).toHaveBeenCalledWith(
-      'order.confirmed',
-      expect.objectContaining({ orderId: order._id.toString() }),
-    );
+    expect(outbox.enqueue).toHaveBeenCalledTimes(1);
+    const [event, usedSession] = outbox.enqueue.mock.calls[0] as unknown as [
+      {
+        eventType: string;
+        queueName: string;
+        aggregateId: string;
+        payload: Record<string, unknown>;
+      },
+      unknown,
+    ];
+    expect(event).toMatchObject({
+      eventType: 'order.confirmed',
+      queueName: 'order.confirmed',
+      aggregateId: order._id.toString(),
+    });
+    expect(event.payload).toMatchObject({ orderId: order._id.toString() });
+    expect(usedSession).toBe(session);
+    expect(session.endSession).toHaveBeenCalledTimes(1);
   });
 
   it('kiểm tra query phân trang và lý do hủy', async () => {

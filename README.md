@@ -28,6 +28,16 @@
 Kiến trúc request production của service được mô tả tại
 [`docs/request-lifecycle.md`](docs/request-lifecycle.md).
 
+Các event `order.confirmed`, `order.ready` và `inventory.low_stock` được ghi vào
+MongoDB Outbox trong cùng transaction với thay đổi nghiệp vụ, sau đó publisher
+gửi bất đồng bộ qua RabbitMQ bằng confirm channel. MongoDB vì vậy phải chạy dưới
+dạng replica set hoặc MongoDB Atlas; standalone MongoDB không hỗ trợ transaction
+cần thiết cho luồng này.
+
+Outbox mặc định retry vô hạn với exponential backoff. Chỉ cấu hình
+`CANTEEN_OUTBOX_MAX_ATTEMPTS` lớn hơn `0` khi đã có cảnh báo và quy trình re-drive
+event bị đánh dấu `failedAt`.
+
 ## Project setup
 
 ```bash

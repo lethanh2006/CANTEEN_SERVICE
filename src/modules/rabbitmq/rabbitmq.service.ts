@@ -20,6 +20,14 @@ import { toError } from '../../common/utils/error.util';
 
 type MessageHandler = (content: unknown) => Promise<void> | void;
 
+export interface RabbitMQPublishOptions {
+  messageId?: string;
+  correlationId?: string;
+  requestId?: string | null;
+  traceparent?: string | null;
+  tracestate?: string | null;
+}
+
 @Injectable()
 export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private connection: amqp.ChannelModel | null = null;
@@ -42,17 +50,25 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async publish(queueName: string, message: unknown): Promise<void> {
+  async publish(
+    queueName: string,
+    message: unknown,
+    options: RabbitMQPublishOptions = {},
+  ): Promise<void> {
+    const parentHeaders = {
+      ...(options.traceparent ? { traceparent: options.traceparent } : {}),
+      ...(options.tracestate ? { tracestate: options.tracestate } : {}),
+    };
     await withMessageSpan(
       `${queueName} publish`,
-      {},
+      parentHeaders,
       async () => {
         try {
           const channel = this.channel;
           if (!channel) {
             throw new Error('Kênh RabbitMQ chưa sẵn sàng');
           }
-          const requestId = getLogContext().request_id;
+          const requestId = options.requestId ?? getLogContext().request_id;
           const headers = injectTraceHeaders(
             typeof requestId === 'string'
               ? { 'x-request-id': requestId }
@@ -62,6 +78,10 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
           channel.sendToQueue(queueName, Buffer.from(JSON.stringify(message)), {
             persistent: true,
             contentType: 'application/json',
+            ...(options.messageId ? { messageId: options.messageId } : {}),
+            ...(options.correlationId
+              ? { correlationId: options.correlationId }
+              : {}),
             headers,
           });
           await channel.waitForConfirms();
@@ -84,6 +104,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
               },
             },
           );
+          throw error;
         }
       },
       {

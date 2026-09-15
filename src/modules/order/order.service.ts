@@ -18,7 +18,6 @@ import {
   OrderDiscountCalculator,
   OrderItemPriceInfo,
 } from './utils/discount-calculator';
-import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { OrderSettlementService } from './order-settlement.service';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
@@ -29,6 +28,7 @@ import {
   OrderCounterDocument,
 } from '../../schemas/order-counter.schema';
 import { toError } from '../../common/utils/error.util';
+import { OutboxService } from '../outbox/outbox.service';
 
 type OrderTableClaim = {
   tableId: Types.ObjectId;
@@ -46,7 +46,7 @@ export class OrderService {
     @InjectModel(Category.name)
     private readonly categoryModel: Model<CategoryDocument>,
     private readonly orderSettlementService: OrderSettlementService,
-    private readonly rabbitMQService: RabbitMQService,
+    private readonly outboxService: OutboxService,
     @InjectModel(Table.name)
     private readonly tableModel: Model<TableDocument>,
     @InjectModel(OrderCounter.name)
@@ -616,72 +616,91 @@ export class OrderService {
    * Công thức: điểm = điểm vai trò * 100 + điểm mang đi * 50 + số phút chờ * 1,5.
    */
   async confirmOrder(id: string): Promise<Order> {
-    const order = await this.orderModel.findById(id).exec();
-    if (!order) {
-      throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
+    const session = await this.orderModel.db.startSession();
+    try {
+      const updatedOrder = await session.withTransaction(async () => {
+        const order = await this.orderModel
+          .findById(id, null, { session })
+          .exec();
+        if (!order) {
+          throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
+        }
+
+        if (order.status !== 'CREATED') {
+          throw new ConflictException(
+            `Đơn hàng ở trạng thái '${order.status}' không thể xác nhận (chỉ đơn CREATED mới được xác nhận)`,
+          );
+        }
+        if (order.paymentMethod !== 'CASH' && order.paymentStatus !== 'PAID') {
+          throw new ConflictException(
+            'Đơn thanh toán điện tử phải được thanh toán trước khi xác nhận',
+          );
+        }
+
+        // Tính điểm ưu tiên theo vai trò người dùng.
+        const roleLower = (order.userRole || '').toLowerCase();
+        let userRoleScore = 0;
+        if (roleLower === 'vip' || roleLower === 'bgd') {
+          userRoleScore = 2;
+        } else if (roleLower === 'manager' || roleLower === 'admin') {
+          userRoleScore = 1;
+        }
+
+        // Đơn mang đi nhận 1 điểm quy đổi, đơn dùng tại bàn nhận 0.
+        const isTakeaway = order.tableId ? 0 : 1;
+        const waitingMinutes = Math.max(
+          0,
+          Math.floor((Date.now() - order.createdAt.getTime()) / 60_000),
+        );
+        const priorityScore =
+          userRoleScore * 100 + isTakeaway * 50 + waitingMinutes * 1.5;
+
+        const transitioned = await this.orderModel
+          .findOneAndUpdate(
+            {
+              _id: order._id,
+              status: 'CREATED',
+              $or: [{ paymentMethod: 'CASH' }, { paymentStatus: 'PAID' }],
+            },
+            { $set: { status: 'CONFIRMED', priorityScore } },
+            { returnDocument: 'after', runValidators: true, session },
+          )
+          .exec();
+        if (!transitioned) {
+          throw new ConflictException(
+            'Đơn hàng đã thay đổi trạng thái hoặc thanh toán; vui lòng tải lại',
+          );
+        }
+
+        await this.outboxService.enqueue(
+          {
+            eventType: 'order.confirmed',
+            queueName: 'order.confirmed',
+            aggregateId: transitioned._id.toString(),
+            payload: {
+              orderId: transitioned._id.toString(),
+              orderNumber: transitioned.orderNumber,
+              priorityScore: transitioned.priorityScore,
+              confirmedAt: transitioned.updatedAt,
+              userRole: transitioned.userRole,
+              isTakeaway: !transitioned.tableId,
+            },
+          },
+          session,
+        );
+
+        return transitioned;
+      }, transactionOptions);
+
+      if (!updatedOrder) {
+        throw new InternalServerErrorException(
+          'Không thể hoàn tất giao dịch xác nhận đơn hàng',
+        );
+      }
+      return updatedOrder;
+    } finally {
+      await session.endSession();
     }
-
-    if (order.status !== 'CREATED') {
-      throw new ConflictException(
-        `Đơn hàng ở trạng thái '${order.status}' không thể xác nhận (chỉ đơn CREATED mới được xác nhận)`,
-      );
-    }
-    if (order.paymentMethod !== 'CASH' && order.paymentStatus !== 'PAID') {
-      throw new ConflictException(
-        'Đơn thanh toán điện tử phải được thanh toán trước khi xác nhận',
-      );
-    }
-
-    // Tính điểm ưu tiên theo vai trò người dùng.
-    const roleLower = (order.userRole || '').toLowerCase();
-    let userRoleScore = 0;
-    if (roleLower === 'vip' || roleLower === 'bgd') {
-      userRoleScore = 2;
-    } else if (roleLower === 'manager' || roleLower === 'admin') {
-      userRoleScore = 1;
-    }
-
-    // Đơn mang đi nhận 1 điểm quy đổi, đơn dùng tại bàn nhận 0.
-    const isTakeaway = order.tableId ? 0 : 1;
-
-    // Tính tổng số phút khách đã chờ.
-    const createdAtTime = order.createdAt.getTime();
-    const waitingMinutes = Math.max(
-      0,
-      Math.floor((Date.now() - createdAtTime) / 60000),
-    );
-
-    // Tính điểm ưu tiên cuối cùng.
-    const priorityScore =
-      userRoleScore * 100 + isTakeaway * 50 + waitingMinutes * 1.5;
-
-    const updatedOrder = await this.orderModel
-      .findOneAndUpdate(
-        {
-          _id: order._id,
-          status: 'CREATED',
-          $or: [{ paymentMethod: 'CASH' }, { paymentStatus: 'PAID' }],
-        },
-        { $set: { status: 'CONFIRMED', priorityScore } },
-        { new: true, runValidators: true },
-      )
-      .exec();
-    if (!updatedOrder) {
-      throw new ConflictException(
-        'Đơn hàng đã thay đổi trạng thái hoặc thanh toán; vui lòng tải lại',
-      );
-    }
-
-    await this.rabbitMQService.publish('order.confirmed', {
-      orderId: updatedOrder._id.toString(),
-      orderNumber: updatedOrder.orderNumber,
-      priorityScore: updatedOrder.priorityScore,
-      confirmedAt: updatedOrder.updatedAt,
-      userRole: updatedOrder.userRole,
-      isTakeaway: !updatedOrder.tableId,
-    });
-
-    return updatedOrder;
   }
 
   /**
@@ -715,3 +734,8 @@ export class OrderService {
     return updatedOrder;
   }
 }
+
+const transactionOptions = {
+  readConcern: { level: 'snapshot' as const },
+  writeConcern: { w: 'majority' as const },
+};

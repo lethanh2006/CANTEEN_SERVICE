@@ -78,19 +78,20 @@ describe('InventoryService atomic consumption', () => {
       find,
       updateOne,
     };
-    const rabbitMQService = {
-      publish: jest.fn().mockResolvedValue(true),
+    const outboxService = {
+      enqueue: jest.fn().mockResolvedValue(undefined),
     };
     const service = new InventoryService(
       ingredientModel as never,
       batchModel as never,
-      rabbitMQService as never,
+      outboxService as never,
     );
 
     return {
       batchModel,
       endSession,
-      rabbitMQService,
+      outboxService,
+      session,
       service,
       withTransaction,
     };
@@ -147,5 +148,37 @@ describe('InventoryService atomic consumption', () => {
       }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(endSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('ghi cảnh báo tồn kho thấp vào outbox trong cùng transaction', async () => {
+    const { outboxService, service, session } = setup();
+
+    await service.consumeIngredient({
+      ingredientId: ingredientId.toString(),
+      quantity: 8,
+    });
+
+    expect(outboxService.enqueue).toHaveBeenCalledTimes(1);
+    const [event, usedSession] = outboxService.enqueue.mock
+      .calls[0] as unknown as [
+      {
+        eventType: string;
+        queueName: string;
+        aggregateId: string;
+        payload: Record<string, unknown>;
+      },
+      unknown,
+    ];
+    expect(event).toMatchObject({
+      eventType: 'inventory.low_stock',
+      queueName: 'inventory.low_stock',
+      aggregateId: ingredientId.toString(),
+    });
+    expect(event.payload).toMatchObject({
+      ingredientId: ingredientId.toString(),
+      currentStock: 2,
+      minimumThreshold: 3,
+    });
+    expect(usedSession).toBe(session);
   });
 });

@@ -15,6 +15,7 @@ import { CategoryModule } from './modules/category/category.module';
 import { IngredientModule } from './modules/ingredient/ingredient.module';
 import { CoreModule } from './core/core.module';
 import { HealthModule } from './modules/health/health.module';
+import { OutboxModule } from './modules/outbox/outbox.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { HealthModule } from './modules/health/health.module';
     DatabaseModule,
     RedisModule,
     RabbitMQModule,
+    OutboxModule,
     TableModule,
     MenuModule,
     OrderModule,

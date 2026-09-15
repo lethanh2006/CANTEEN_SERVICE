@@ -92,6 +92,20 @@ describe('RabbitMQ canteen observability', () => {
     await service.onModuleDestroy();
   });
 
+  it('trả lỗi publish lên caller để outbox có thể retry', async () => {
+    const { service, channel } = await setup();
+    jest.spyOn(appLogger, 'error').mockImplementation();
+    channel.waitForConfirms.mockRejectedValueOnce(
+      new Error('publisher confirm failed'),
+    );
+
+    await expect(
+      service.publish('order.ready', { orderId: 'order-1' }),
+    ).rejects.toThrow('publisher confirm failed');
+
+    await service.onModuleDestroy();
+  });
+
   it('giữ trace headers và chỉ ghi detailed error khi hết retry vào DLQ', async () => {
     const { service, channel } = await setup();
     const errorSpy = jest.spyOn(appLogger, 'error').mockImplementation();

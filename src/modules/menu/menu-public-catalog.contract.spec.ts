@@ -29,7 +29,7 @@ describe('Thực đơn công khai', () => {
   it('không truy vấn món khi tìm kiếm mà không có danh mục công khai', async () => {
     const find = jest.fn();
     const service = new MenuService(
-      { distinct: () => ({ exec: async () => [] }) } as never,
+      { distinct: () => ({ exec: () => Promise.resolve([]) }) } as never,
       { find } as never,
       {} as never,
     );
@@ -49,10 +49,12 @@ describe('Thực đơn công khai', () => {
       { name: 'Cơm', categoryId: categories[0]._id },
       { name: 'Bún', categoryId: categories[0]._id },
     ];
-    const find = jest.fn(() => ({ exec: async () => items }));
+    const find = jest.fn(() => ({ exec: () => Promise.resolve(items) }));
     const service = new MenuService(
       {
-        find: () => ({ sort: () => ({ exec: async () => categories }) }),
+        find: () => ({
+          sort: () => ({ exec: () => Promise.resolve(categories) }),
+        }),
       } as never,
       { find } as never,
       {} as never,
@@ -72,7 +74,9 @@ describe('Thực đơn công khai', () => {
   it('không tải món khi thực đơn không có danh mục hoạt động', async () => {
     const find = jest.fn();
     const service = new MenuService(
-      { find: () => ({ sort: () => ({ exec: async () => [] }) }) } as never,
+      {
+        find: () => ({ sort: () => ({ exec: () => Promise.resolve([]) }) }),
+      } as never,
       { find } as never,
       {} as never,
     );

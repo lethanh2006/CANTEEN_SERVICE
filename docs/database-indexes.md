@@ -16,6 +16,7 @@ Các ràng buộc `unique` tiếp tục nằm trong `@Prop`. Index tối ưu tru
 | InventoryBatch | `{ expiryDate: 1 }`, partial `status = ACTIVE` và `quantity > 0`    | `getExpiryAlerts`                                                      |
 | MenuItem       | `{ categoryId: 1, isAvailable: 1 }`                                 | Menu công khai/tìm kiếm và kiểm tra trước khi xóa danh mục             |
 | Category       | `{ displayOrder: 1, name: 1 }`                                      | Thứ tự danh mục trong menu quản trị, công khai và CRUD mặc định        |
+| OutboxEvent    | `{ publishedAt: 1, failedAt: 1, nextAttemptAt: 1, createdAt: 1 }`   | Claim event chưa phát theo thời hạn retry và thứ tự tạo                |
 
 `_id` đứng sau thời gian trong danh sách đơn để có thứ tự ổn định khi nhiều đơn
 cùng `createdAt`. Đây vẫn là phân trang offset: khi dữ liệu thay đổi giữa hai
@@ -37,6 +38,11 @@ index không tự chạy theo đồng hồ.
 Index bàn chỉ giữ `tableId`. Kiểm tra trên MongoDB 7 với điều kiện `$nor` thực tế
 cho thấy thêm `status` và `paymentStatus` vẫn phải đọc cùng số document của bàn;
 không giữ hai trường đó trong index để tránh cập nhật index khi trạng thái đổi.
+
+Index outbox đặt các điều kiện equality (`publishedAt`, `failedAt`) trước thời
+điểm retry và thứ tự tạo. Publisher dùng `findOneAndUpdate` nguyên tử để claim
+một event, tăng `attemptCount` và dời `nextAttemptAt` thành lease; nhiều instance
+không cùng claim một row tại cùng thời điểm.
 
 ## Các thay đổi service
 

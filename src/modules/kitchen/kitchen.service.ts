@@ -6,13 +6,13 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Order, OrderDocument } from '../../schemas/orders.schema';
-import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
+import { OutboxService } from '../outbox/outbox.service';
 
 @Injectable()
 export class KitchenService {
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
-    private readonly rabbitMQService: RabbitMQService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   /**
@@ -86,35 +86,63 @@ export class KitchenService {
    * Chuyển đơn sang READY và phát sự kiện món đã sẵn sàng.
    */
   async setOrderReady(id: string): Promise<Order> {
-    const transitioned = await this.orderModel
-      .findOneAndUpdate(
-        { _id: id, status: 'COOKING' },
-        { $set: { status: 'READY' } },
-        { new: true },
-      )
-      .exec();
+    const session = await this.orderModel.db.startSession();
+    try {
+      const result = await session.withTransaction(async () => {
+        const transitioned = await this.orderModel
+          .findOneAndUpdate(
+            { _id: id, status: 'COOKING' },
+            { $set: { status: 'READY' } },
+            { returnDocument: 'after', session },
+          )
+          .exec();
 
-    if (transitioned) {
-      await this.rabbitMQService.publish('order.ready', {
-        orderId: transitioned._id.toString(),
-        orderNumber: transitioned.orderNumber,
-        status: transitioned.status,
-        updatedAt: transitioned.updatedAt,
-      });
-      return transitioned;
+        if (transitioned) {
+          await this.outboxService.enqueue(
+            {
+              eventType: 'order.ready',
+              queueName: 'order.ready',
+              aggregateId: transitioned._id.toString(),
+              payload: {
+                orderId: transitioned._id.toString(),
+                orderNumber: transitioned.orderNumber,
+                status: transitioned.status,
+                updatedAt: transitioned.updatedAt,
+              },
+            },
+            session,
+          );
+          return transitioned;
+        }
+
+        const current = await this.orderModel
+          .findById(id, null, { session })
+          .exec();
+        if (!current) {
+          throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
+        }
+        if (current.status === 'READY') {
+          return current;
+        }
+
+        throw new ConflictException(
+          `Đơn hàng ở trạng thái '${current.status}' không thể chuyển sang READY (chỉ đơn COOKING mới có thể hoàn tất chế biến)`,
+        );
+      }, transactionOptions);
+
+      if (!result) {
+        throw new ConflictException(
+          'Không thể hoàn tất giao dịch cập nhật trạng thái món ăn',
+        );
+      }
+      return result;
+    } finally {
+      await session.endSession();
     }
-
-    const current = await this.orderModel.findById(id).exec();
-    if (!current) {
-      throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
-    }
-
-    if (current.status === 'READY') {
-      return current;
-    }
-
-    throw new ConflictException(
-      `Đơn hàng ở trạng thái '${current.status}' không thể chuyển sang READY (chỉ đơn COOKING mới có thể hoàn tất chế biến)`,
-    );
   }
 }
+
+const transactionOptions = {
+  readConcern: { level: 'snapshot' as const },
+  writeConcern: { w: 'majority' as const },
+};

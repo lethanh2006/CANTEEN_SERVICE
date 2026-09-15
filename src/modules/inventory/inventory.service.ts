@@ -21,7 +21,7 @@ import {
   ConsumableBatch,
   InventoryDeductionReport,
 } from './utils/fefo-consumption';
-import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
+import { OutboxService } from '../outbox/outbox.service';
 
 export interface InventoryBatchSummary {
   batchId: string;
@@ -43,7 +43,7 @@ export class InventoryService {
     private readonly ingredientModel: Model<IngredientDocument>,
     @InjectModel(InventoryBatch.name)
     private readonly batchModel: Model<InventoryBatchDocument>,
-    private readonly rabbitMQService: RabbitMQService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   /**
@@ -240,6 +240,25 @@ export class InventoryService {
             }
           }
 
+          if (report.isLowStockAlert) {
+            await this.outboxService.enqueue(
+              {
+                eventType: 'inventory.low_stock',
+                queueName: 'inventory.low_stock',
+                aggregateId: ingredient._id.toString(),
+                payload: {
+                  ingredientId: ingredient._id.toString(),
+                  ingredientName: ingredient.name,
+                  currentStock: report.remainingTotalStock,
+                  minimumThreshold: ingredient.minimumThreshold,
+                  unit: ingredient.unit,
+                  alertTime: new Date(),
+                },
+              },
+              session,
+            );
+          }
+
           return { ingredient, report };
         },
         {
@@ -256,18 +275,6 @@ export class InventoryService {
     }
 
     const { ingredient, report } = committed;
-
-    // Phát sự kiện cảnh báo khi tồn kho xuống dưới ngưỡng tối thiểu.
-    if (report.isLowStockAlert) {
-      await this.rabbitMQService.publish('inventory.low_stock', {
-        ingredientId: ingredient._id.toString(),
-        ingredientName: ingredient.name,
-        currentStock: report.remainingTotalStock,
-        minimumThreshold: ingredient.minimumThreshold,
-        unit: ingredient.unit,
-        alertTime: new Date(),
-      });
-    }
 
     return {
       ingredient: {
