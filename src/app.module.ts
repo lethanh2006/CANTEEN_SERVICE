@@ -7,12 +7,8 @@ import { RabbitMQModule } from './modules/rabbitmq/rabbitmq.module';
 import { TableModule } from './modules/table/table.module';
 import { MenuModule } from './modules/menu/menu.module';
 import { OrderModule } from './modules/order/order.module';
-import { KitchenModule } from './modules/kitchen/kitchen.module';
-import { InventoryModule } from './modules/inventory/inventory.module';
-import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ConfigModule } from '@nestjs/config';
 import { CategoryModule } from './modules/category/category.module';
-import { IngredientModule } from './modules/ingredient/ingredient.module';
 import { CoreModule } from './core/core.module';
 import { HealthModule } from './modules/health/health.module';
 import { OutboxModule } from './modules/outbox/outbox.module';
@@ -31,11 +27,7 @@ import { OutboxModule } from './modules/outbox/outbox.module';
     TableModule,
     MenuModule,
     OrderModule,
-    KitchenModule,
-    InventoryModule,
-    AnalyticsModule,
     CategoryModule,
-    IngredientModule,
     HealthModule,
   ],
   controllers: [AppController],

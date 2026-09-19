@@ -37,6 +37,10 @@ export class ListOrdersQueryDto {
   userId?: string;
 
   @IsOptional()
+  @IsMongoId({ message: 'ID bàn ăn không đúng định dạng ObjectId' })
+  tableId?: string;
+
+  @IsOptional()
   @IsISO8601({}, { message: 'Thời gian bắt đầu không hợp lệ' })
   from?: string;
 

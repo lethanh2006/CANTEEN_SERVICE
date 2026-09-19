@@ -91,7 +91,7 @@ describe('Vòng đời đơn hàng căn tin', () => {
 
     await service.cancelOrder(
       order._id.toString(),
-      { _id: operatorId.toString(), role: 'cashier' },
+      { _id: operatorId.toString(), role: 'admin' },
       '  Khách đổi món  ',
     );
 

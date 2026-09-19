@@ -17,7 +17,7 @@ export class InventoryController {
    * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Post('batches')
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async createBatch(@Body() dto: CreateInventoryBatchDto) {
     return this.inventoryService.createBatch(dto);
   }
@@ -28,7 +28,7 @@ export class InventoryController {
    * Quyền hạn: Quản trị viên, quản lý hoặc đầu bếp.
    */
   @Get('expiry-alerts')
-  @Roles(Role.ADMIN, Role.MANAGER, Role.CHEF)
+  @Roles(Role.ADMIN)
   async getExpiryAlerts() {
     return this.inventoryService.getExpiryAlerts();
   }
@@ -39,7 +39,7 @@ export class InventoryController {
    * Quyền hạn: Đầu bếp, quản trị viên hoặc quản lý.
    */
   @Post('consume')
-  @Roles(Role.CHEF, Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async consumeIngredient(@Body() dto: ConsumeIngredientDto) {
     return this.inventoryService.consumeIngredient(dto);
   }

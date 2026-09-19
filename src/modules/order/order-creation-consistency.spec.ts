@@ -126,6 +126,7 @@ describe('Tạo đơn hàng nhất quán', () => {
       orderCounterModel as never,
     );
     const dto = Object.assign(new CreateOrderDto(), {
+      tableId: tableId.toString(),
       items: [{ menuItemId: menuItemId.toString(), quantity: 1 }],
       paymentMethod: 'CASH',
     });

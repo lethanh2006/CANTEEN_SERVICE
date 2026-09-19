@@ -1,16 +1,8 @@
-import {
-  Controller,
-  Post,
-  Patch,
-  Body,
-  Param,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Patch, Body, Param, UseGuards } from '@nestjs/common';
 import { TableService } from './table.service';
 import { CreateTableDto } from './dto/create-table.dto';
 import { UpdateTableDto } from './dto/update-table.dto';
 import { UpdateTableStatusDto } from './dto/update-table-status.dto';
-import { AllocateTableDto } from './dto/allocate-table.dto';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../common/enums/role.enum';
@@ -26,7 +18,7 @@ const TableCrudController = createCrudController<
   createDto: CreateTableDto,
   updateDto: UpdateTableDto,
   idFieldName: 'ID bàn ăn',
-  writeRoles: [Role.ADMIN, Role.MANAGER],
+  writeRoles: [Role.ADMIN],
 });
 
 @Controller('api/canteen/tables')
@@ -42,22 +34,11 @@ export class TableController extends TableCrudController {
    * Quyền hạn: Quản trị viên, quản lý hoặc nhân viên phục vụ.
    */
   @Patch(':id/status')
-  @Roles(Role.ADMIN, Role.MANAGER, Role.WAITER)
+  @Roles(Role.ADMIN)
   async updateTableStatus(
     @Param('id', new ParseObjectIdPipe('ID bàn ăn')) id: string,
     @Body() updateStatusDto: UpdateTableStatusDto,
   ) {
     return this.tableService.updateTableStatus(id, updateStatusDto);
-  }
-
-  /**
-   * POST /api/canteen/tables/allocate
-   * Phân bổ hoặc gộp bàn tự động cho nhóm khách.
-   * Quyền hạn: Quản trị viên, quản lý hoặc nhân viên phục vụ.
-   */
-  @Post('allocate')
-  @Roles(Role.ADMIN, Role.MANAGER, Role.WAITER)
-  async allocateTables(@Body() allocateTableDto: AllocateTableDto) {
-    return this.tableService.allocateTables(allocateTableDto);
   }
 }

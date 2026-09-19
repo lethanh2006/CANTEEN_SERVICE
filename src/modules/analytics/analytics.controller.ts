@@ -15,7 +15,7 @@ export class AnalyticsController {
    * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Get('top-dishes')
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async getTopDishes(@Query('limit') limit?: number) {
     return this.analyticsService.getTopDishes(limit ? Number(limit) : 10);
   }

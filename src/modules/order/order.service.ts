@@ -174,11 +174,15 @@ export class OrderService {
       );
     }
 
-    const paymentMethod = dto.paymentMethod ?? 'CASH';
-    if (paymentMethod === 'VIETQR' && discountResult.finalAmount === 0) {
+    if (dto.paymentMethod && dto.paymentMethod !== 'CASH') {
       throw new BadRequestException(
-        'Đơn hàng 0 đồng không cần và không thể thanh toán bằng VIETQR',
+        'Phương thức thanh toán hiện chỉ hỗ trợ tiền mặt (CASH)',
       );
+    }
+    const paymentMethod = 'CASH';
+
+    if (!dto.tableId) {
+      throw new BadRequestException('Cần chọn bàn trước khi gọi món');
     }
 
     const tableClaim = dto.tableId
@@ -464,6 +468,7 @@ export class OrderService {
     if (query.status) filter.status = query.status;
     if (query.paymentStatus) filter.paymentStatus = query.paymentStatus;
     if (query.userId) filter.userId = new Types.ObjectId(query.userId);
+    if (query.tableId) filter.tableId = new Types.ObjectId(query.tableId);
 
     const from = query.from ? new Date(query.from) : undefined;
     const to = query.to ? new Date(query.to) : undefined;
@@ -518,13 +523,7 @@ export class OrderService {
 
     if (user) {
       const requesterId = user._id ?? user.id;
-      const privilegedRoles = new Set([
-        'admin',
-        'manager',
-        'cashier',
-        'waiter',
-        'chef',
-      ]);
+      const privilegedRoles = new Set(['admin']);
       if (
         order.userId.toString() !== requesterId &&
         !privilegedRoles.has(user.role?.toLowerCase() ?? '')
@@ -557,9 +556,7 @@ export class OrderService {
     }
 
     const isOwner = order.userId.toString() === rawUserId;
-    const isOperator = new Set(['admin', 'manager', 'cashier', 'waiter']).has(
-      user.role?.toLowerCase() ?? '',
-    );
+    const isOperator = user.role?.toLowerCase() === 'admin';
     if (!isOwner && !isOperator) {
       throw new ForbiddenException('Bạn không có quyền hủy đơn hàng này');
     }
@@ -724,13 +721,43 @@ export class OrderService {
     }
 
     order.status = 'COMPLETED';
-    if (order.paymentStatus === 'PENDING' && order.paymentMethod === 'CASH') {
-      order.paymentStatus = 'PAID';
+    const updatedOrder = await order.save();
+
+    return updatedOrder;
+  }
+
+  /** Admin xác nhận đã thu tiền mặt; đây là thao tác thanh toán duy nhất hiện tại. */
+  async confirmCashPayment(
+    id: string,
+    admin: AuthenticatedUser,
+  ): Promise<Order> {
+    const rawAdminId = admin._id ?? admin.id;
+    if (!rawAdminId || !Types.ObjectId.isValid(rawAdminId)) {
+      throw new UnauthorizedException('Thông tin quản trị viên không hợp lệ');
     }
 
+    const order = await this.orderModel.findById(id).exec();
+    if (!order) {
+      throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
+    }
+    if (order.status === 'CANCELLED') {
+      throw new ConflictException('Đơn hàng đã hủy không thể thu tiền');
+    }
+    if (order.paymentMethod !== 'CASH') {
+      throw new ConflictException(
+        'Đơn hàng không thuộc phương thức thanh toán tiền mặt',
+      );
+    }
+    if (order.paymentStatus === 'PAID') {
+      return order;
+    }
+
+    order.paymentStatus = 'PAID';
+    order.status = 'COMPLETED';
+    order.paidAt = new Date();
+    order.paidBy = new Types.ObjectId(rawAdminId);
     const updatedOrder = await order.save();
     await this.orderSettlementService.reconcileTableForOrder(updatedOrder._id);
-
     return updatedOrder;
   }
 }

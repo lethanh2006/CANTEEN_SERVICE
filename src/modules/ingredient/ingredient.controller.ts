@@ -15,7 +15,7 @@ const IngredientCrudController = createCrudController<
   createDto: CreateIngredientDto,
   updateDto: UpdateIngredientDto,
   idFieldName: 'ID nguyên liệu',
-  writeRoles: [Role.ADMIN, Role.MANAGER],
+  writeRoles: [Role.ADMIN],
 });
 
 @Controller('api/canteen/inventory/ingredients')

@@ -55,7 +55,7 @@ export class OrderController {
    * Danh sách vận hành có lọc và phân trang.
    */
   @Get()
-  @Roles(Role.ADMIN, Role.MANAGER, Role.CASHIER, Role.WAITER, Role.CHEF)
+  @Roles(Role.ADMIN)
   async listOrders(@Query() query: ListOrdersQueryDto) {
     return this.orderService.listOrders(query);
   }
@@ -94,7 +94,7 @@ export class OrderController {
    * Quyền hạn: Thu ngân, quản trị viên, quản lý hoặc nhân viên phục vụ.
    */
   @Patch(':id/confirm')
-  @Roles(Role.ADMIN, Role.MANAGER, Role.CASHIER, Role.WAITER)
+  @Roles(Role.ADMIN)
   async confirmOrder(
     @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
   ) {
@@ -107,10 +107,20 @@ export class OrderController {
    * Quyền hạn: Thu ngân, quản trị viên, quản lý hoặc nhân viên phục vụ.
    */
   @Patch(':id/complete')
-  @Roles(Role.ADMIN, Role.MANAGER, Role.CASHIER, Role.WAITER)
+  @Roles(Role.ADMIN)
   async completeOrder(
     @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
   ) {
     return this.orderService.completeOrder(id);
+  }
+
+  /** PATCH /api/canteen/orders/:id/payment/cash — admin xác nhận đã thu tiền mặt. */
+  @Patch(':id/payment/cash')
+  @Roles(Role.ADMIN)
+  async confirmCashPayment(
+    @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
+    @User() user: AuthenticatedUser,
+  ) {
+    return this.orderService.confirmCashPayment(id, user);
   }
 }

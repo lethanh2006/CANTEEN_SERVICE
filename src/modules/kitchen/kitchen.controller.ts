@@ -16,7 +16,7 @@ export class KitchenController {
    * Quyền hạn: Đầu bếp, quản trị viên hoặc quản lý.
    */
   @Get('queue')
-  @Roles(Role.CHEF, Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async getQueue() {
     return this.kitchenService.getQueue();
   }
@@ -27,7 +27,7 @@ export class KitchenController {
    * Quyền hạn: Đầu bếp, quản trị viên hoặc quản lý.
    */
   @Post('next')
-  @Roles(Role.CHEF, Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async getNextOrder() {
     return this.kitchenService.getNextOrder();
   }
@@ -38,7 +38,7 @@ export class KitchenController {
    * Quyền hạn: Đầu bếp, quản trị viên hoặc quản lý.
    */
   @Patch('orders/:id/cooking')
-  @Roles(Role.CHEF, Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async setOrderCooking(
     @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
   ) {
@@ -51,7 +51,7 @@ export class KitchenController {
    * Quyền hạn: Đầu bếp, quản trị viên hoặc quản lý.
    */
   @Patch('orders/:id/ready')
-  @Roles(Role.CHEF, Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async setOrderReady(
     @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
   ) {

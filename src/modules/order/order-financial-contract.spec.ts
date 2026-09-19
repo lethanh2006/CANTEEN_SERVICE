@@ -27,7 +27,7 @@ describe('Hợp đồng tiền và số lượng của đơn hàng', () => {
     expect(validateSync(orderItem)).not.toHaveLength(0);
   });
 
-  it('từ chối VIETQR cho đơn hàng 0 đồng', async () => {
+  it('từ chối phương thức thanh toán không còn được hỗ trợ', async () => {
     const menuItem = {
       _id: new Types.ObjectId(),
       categoryId: new Types.ObjectId(),

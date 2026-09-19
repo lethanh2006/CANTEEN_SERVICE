@@ -15,7 +15,7 @@ const CategoryCrudController = createCrudController<
   createDto: CreateCategoryDto,
   updateDto: UpdateCategoryDto,
   idFieldName: 'ID danh mục',
-  writeRoles: [Role.ADMIN, Role.MANAGER],
+  writeRoles: [Role.ADMIN],
 });
 
 @Controller('api/canteen/categories')

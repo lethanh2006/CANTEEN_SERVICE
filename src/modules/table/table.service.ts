@@ -4,13 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import { Table, TableDocument } from '../../schemas/tables.schema';
 import { CreateTableDto } from './dto/create-table.dto';
 import { UpdateTableDto } from './dto/update-table.dto';
 import { UpdateTableStatusDto } from './dto/update-table-status.dto';
-import { AllocateTableDto } from './dto/allocate-table.dto';
-import { TableAllocationService, TableItem } from './utils/table-allocation';
 import { BaseCrudService } from '../../common/crud';
 
 @Injectable()
@@ -50,51 +48,6 @@ export class TableService extends BaseCrudService<
 
     table.status = dto.status;
     return await table.save();
-  }
-
-  /**
-   * POST /api/canteen/tables/allocate
-   * Phân bổ hoặc gộp bàn tự động theo số lượng khách.
-   */
-  async allocateTables(dto: AllocateTableDto): Promise<unknown> {
-    const emptyTableDocs = await this.model.find({ status: 'empty' }).exec();
-
-    const emptyTables: TableItem[] = emptyTableDocs.map((t) => ({
-      id: t._id.toString(),
-      name: t.name,
-      capacity: t.capacity,
-      status: t.status as 'empty',
-    }));
-
-    const result = TableAllocationService.allocateTables(
-      emptyTables,
-      dto.partySize,
-    );
-    if (!result) {
-      throw new ConflictException(
-        `Không đủ bàn trống để xếp chỗ cho nhóm ${dto.partySize} người (Tổng sức chứa hiện có: ${emptyTables.reduce((acc, t) => acc + t.capacity, 0)})`,
-      );
-    }
-
-    // Đánh dấu các bàn vừa được phân bổ là đang sử dụng.
-    const objectIds = result.allocatedTableIds.map(
-      (id) => new Types.ObjectId(id),
-    );
-    await this.model
-      .updateMany({ _id: { $in: objectIds } }, { $set: { status: 'occupied' } })
-      .exec();
-
-    const allocatedTables = await this.model
-      .find({ _id: { $in: objectIds } })
-      .exec();
-
-    return {
-      message: result.isMerged
-        ? `Đã gộp ${result.allocatedTableIds.length} bàn thành công cho nhóm ${dto.partySize} người`
-        : `Đã phân bổ 1 bàn phù hợp cho nhóm ${dto.partySize} người`,
-      allocationDetails: result,
-      tables: allocatedTables,
-    };
   }
 
   protected prepareCreate(dto: CreateTableDto): Record<string, unknown> {

@@ -49,7 +49,7 @@ export class MenuController {
    * Lấy cả món/danh mục đang ẩn để quản trị viên có thể bật lại hoặc chỉnh sửa.
    */
   @Get('admin/menu')
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async getAdminMenu() {
     return this.menuService.getAdminMenu();
   }
@@ -60,7 +60,7 @@ export class MenuController {
    * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Post('admin/menu')
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async createMenuItem(
     @Body() createMenuItemDto: CreateMenuItemDto,
     @User() user: AuthenticatedUser,
@@ -75,7 +75,7 @@ export class MenuController {
    * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Put('admin/menu/:id')
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async updateMenuItem(
     @Param('id', new ParseObjectIdPipe('ID món ăn')) id: string,
     @Body() updateMenuItemDto: UpdateMenuItemDto,
@@ -91,7 +91,7 @@ export class MenuController {
    * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Delete('admin/menu/:id')
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async deleteMenuItem(
     @Param('id', new ParseObjectIdPipe('ID món ăn')) id: string,
     @User() user: AuthenticatedUser,
@@ -106,7 +106,7 @@ export class MenuController {
    * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Post('admin/menu/undo')
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async undoMenuItemChange(@User() user: AuthenticatedUser) {
     const userId = user?._id || user?.id || 'system';
     return this.menuService.undoMenuItemChange(userId);
@@ -118,7 +118,7 @@ export class MenuController {
    * Quyền hạn: Quản trị viên hoặc quản lý.
    */
   @Post('admin/menu/redo')
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   async redoMenuItemChange(@User() user: AuthenticatedUser) {
     const userId = user?._id || user?.id || 'system';
     return this.menuService.redoMenuItemChange(userId);

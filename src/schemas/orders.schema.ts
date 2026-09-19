@@ -152,6 +152,9 @@ export class Order {
   @Prop({ required: false })
   paidAt?: Date;
 
+  @Prop({ type: mongoose.Schema.Types.ObjectId, required: false })
+  paidBy?: Types.ObjectId;
+
   @Prop({ required: false })
   cancelledAt?: Date;
 

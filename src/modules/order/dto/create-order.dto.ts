@@ -49,9 +49,8 @@ export class CreateOrderItemDto {
 }
 
 export class CreateOrderDto {
-  @IsOptional()
   @IsMongoId({ message: 'ID bàn ăn không đúng định dạng ObjectId' })
-  tableId?: string;
+  tableId!: string;
 
   @IsNotEmpty({ message: 'Danh sách món ăn (items) không được để trống' })
   @IsArray({ message: 'Danh sách món ăn phải là mảng' })
@@ -60,8 +59,8 @@ export class CreateOrderDto {
   items!: CreateOrderItemDto[];
 
   @IsOptional()
-  @IsEnum(['CASH', 'VIETQR'], {
-    message: 'Phương thức thanh toán phải là CASH hoặc VIETQR',
+  @IsEnum(['CASH'], {
+    message: 'Phương thức thanh toán hiện chỉ hỗ trợ tiền mặt (CASH)',
   })
   paymentMethod?: string;
 }
