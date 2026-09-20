@@ -8,9 +8,6 @@ export class Table {
   @Prop({ required: true, unique: true, trim: true })
   name!: string;
 
-  @Prop({ required: true })
-  qrCodeUrl!: string;
-
   @Prop({ required: true, default: 4 })
   capacity!: number;
 

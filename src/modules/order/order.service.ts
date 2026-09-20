@@ -14,10 +14,6 @@ import { Order, OrderDocument, OrderItem } from '../../schemas/orders.schema';
 import { MenuItem, MenuItemDocument } from '../../schemas/menu_items.schema';
 import { Category, CategoryDocument } from '../../schemas/categories.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
-import {
-  OrderDiscountCalculator,
-  OrderItemPriceInfo,
-} from './utils/discount-calculator';
 import { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { OrderSettlementService } from './order-settlement.service';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
@@ -28,7 +24,6 @@ import {
   OrderCounterDocument,
 } from '../../schemas/order-counter.schema';
 import { toError } from '../../common/utils/error.util';
-import { OutboxService } from '../outbox/outbox.service';
 
 type OrderTableClaim = {
   tableId: Types.ObjectId;
@@ -46,7 +41,6 @@ export class OrderService {
     @InjectModel(Category.name)
     private readonly categoryModel: Model<CategoryDocument>,
     private readonly orderSettlementService: OrderSettlementService,
-    private readonly outboxService: OutboxService,
     @InjectModel(Table.name)
     private readonly tableModel: Model<TableDocument>,
     @InjectModel(OrderCounter.name)
@@ -74,7 +68,7 @@ export class OrderService {
     }
 
     const orderItems: OrderItem[] = [];
-    const itemPriceInfos: OrderItemPriceInfo[] = [];
+    let totalAmount = 0;
 
     // Đọc món và danh mục theo lô, không truy vấn lại theo từng dòng giỏ hàng.
     const menuItemIds = [
@@ -140,11 +134,19 @@ export class OrderService {
           `Giá món '${menuItem.name}' không phải số nguyên VND hợp lệ`,
         );
       }
-      itemPriceInfos.push({
-        unitPrice,
-        quantity: itemDto.quantity,
-        optionsPrice: optionsTotalPrice,
-      });
+      const lineAmount = (unitPrice + optionsTotalPrice) * itemDto.quantity;
+      if (
+        !Number.isSafeInteger(itemDto.quantity) ||
+        itemDto.quantity < 1 ||
+        !Number.isSafeInteger(lineAmount) ||
+        lineAmount < 0 ||
+        !Number.isSafeInteger(totalAmount + lineAmount)
+      ) {
+        throw new ConflictException(
+          'Tổng tiền đơn hàng không phải số nguyên VND an toàn',
+        );
+      }
+      totalAmount += lineAmount;
 
       orderItems.push({
         menuItemId: menuItem._id,
@@ -154,24 +156,6 @@ export class OrderService {
         selectedOptions: selectedOptions,
         note: itemDto.note || '',
       });
-    }
-
-    // Tính tổng tiền và các khoản giảm giá của đơn hàng.
-    const discountResult = OrderDiscountCalculator.calculateFinalPrice(
-      itemPriceInfos,
-      {
-        // Khoản trợ cấp có thể được cấu hình theo chính sách doanh nghiệp.
-        dailySubsidyAmount: 0,
-      },
-    );
-    if (
-      !Number.isSafeInteger(discountResult.rawTotal) ||
-      !Number.isSafeInteger(discountResult.totalDiscount) ||
-      !Number.isSafeInteger(discountResult.finalAmount)
-    ) {
-      throw new ConflictException(
-        'Tổng tiền đơn hàng không phải số nguyên VND an toàn',
-      );
     }
 
     if (dto.paymentMethod && dto.paymentMethod !== 'CASH') {
@@ -185,33 +169,27 @@ export class OrderService {
       throw new BadRequestException('Cần chọn bàn trước khi gọi món');
     }
 
-    const tableClaim = dto.tableId
-      ? await this.occupyTableForOrder(dto.tableId)
-      : null;
+    const tableClaim = await this.occupyTableForOrder(dto.tableId);
     try {
       const orderNumber = await this.nextOrderNumber();
       const newOrder = new this.orderModel({
         orderNumber,
         userId,
         userRole,
-        tableId: tableClaim?.tableId ?? null,
+        tableId: tableClaim.tableId,
         items: orderItems,
-        totalAmount: discountResult.rawTotal,
-        discountAmount: discountResult.totalDiscount,
-        finalAmount: discountResult.finalAmount,
+        totalAmount,
+        finalAmount: totalAmount,
         status: 'CREATED',
-        priorityScore: 0,
         paymentStatus: 'PENDING',
         paymentMethod,
       });
 
       const savedOrder = await newOrder.save();
-      if (tableClaim) {
-        await this.ensureTableOccupied(tableClaim.tableId);
-      }
+      await this.ensureTableOccupied(tableClaim.tableId);
       return savedOrder;
     } catch (error) {
-      if (tableClaim?.transitionedFromEmpty) {
+      if (tableClaim.transitionedFromEmpty) {
         await this.rollbackTableOccupancy(tableClaim.tableId);
       }
       throw error;
@@ -355,13 +333,8 @@ export class OrderService {
       const unsettledOrder = await this.orderModel
         .exists({
           tableId,
-          $nor: [
-            { status: 'CANCELLED' },
-            {
-              status: { $in: ['COMPLETED', 'PAID'] },
-              paymentStatus: 'PAID',
-            },
-          ],
+          status: { $ne: 'CANCELLED' },
+          paymentStatus: { $ne: 'PAID' },
         })
         .exec();
       if (unsettledOrder) return;
@@ -389,9 +362,7 @@ export class OrderService {
   }
 
   /**
-   * Giá option luôn được lấy từ MenuItem trong MongoDB. Trường `price` mà
-   * client cũ gửi lên chỉ được giữ để tương thích DTO và không tham gia tính
-   * tiền.
+   * Giá tùy chọn luôn được lấy từ MenuItem trong MongoDB.
    */
   private resolveSelectedOptions(
     menuItem: MenuItemDocument,
@@ -565,14 +536,9 @@ export class OrderService {
       return order;
     }
     if (order.paymentStatus === 'PAID') {
-      throw new ConflictException(
-        'Đơn hàng đã thanh toán không thể hủy khi chưa hoàn tiền',
-      );
+      throw new ConflictException('Đơn hàng đã thanh toán không thể hủy');
     }
-    const allowedStatuses = isOperator
-      ? new Set(['CREATED', 'CONFIRMED'])
-      : new Set(['CREATED']);
-    if (!allowedStatuses.has(order.status)) {
+    if (order.status !== 'CREATED') {
       throw new ConflictException(
         `Đơn hàng ở trạng thái '${order.status}' không thể hủy`,
       );
@@ -583,8 +549,8 @@ export class OrderService {
       .findOneAndUpdate(
         {
           _id: order._id,
-          status: { $in: [...allowedStatuses] },
-          paymentStatus: { $ne: 'PAID' },
+          status: 'CREATED',
+          paymentStatus: 'PENDING',
         },
         {
           $set: {
@@ -608,124 +574,6 @@ export class OrderService {
     return cancelledOrder;
   }
 
-  /**
-   * Xác nhận đơn hàng, tính điểm ưu tiên và phát sự kiện chế biến.
-   * Công thức: điểm = điểm vai trò * 100 + điểm mang đi * 50 + số phút chờ * 1,5.
-   */
-  async confirmOrder(id: string): Promise<Order> {
-    const session = await this.orderModel.db.startSession();
-    try {
-      const updatedOrder = await session.withTransaction(async () => {
-        const order = await this.orderModel
-          .findById(id, null, { session })
-          .exec();
-        if (!order) {
-          throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
-        }
-
-        if (order.status !== 'CREATED') {
-          throw new ConflictException(
-            `Đơn hàng ở trạng thái '${order.status}' không thể xác nhận (chỉ đơn CREATED mới được xác nhận)`,
-          );
-        }
-        if (order.paymentMethod !== 'CASH' && order.paymentStatus !== 'PAID') {
-          throw new ConflictException(
-            'Đơn thanh toán điện tử phải được thanh toán trước khi xác nhận',
-          );
-        }
-
-        // Tính điểm ưu tiên theo vai trò người dùng.
-        const roleLower = (order.userRole || '').toLowerCase();
-        let userRoleScore = 0;
-        if (roleLower === 'vip' || roleLower === 'bgd') {
-          userRoleScore = 2;
-        } else if (roleLower === 'manager' || roleLower === 'admin') {
-          userRoleScore = 1;
-        }
-
-        // Đơn mang đi nhận 1 điểm quy đổi, đơn dùng tại bàn nhận 0.
-        const isTakeaway = order.tableId ? 0 : 1;
-        const waitingMinutes = Math.max(
-          0,
-          Math.floor((Date.now() - order.createdAt.getTime()) / 60_000),
-        );
-        const priorityScore =
-          userRoleScore * 100 + isTakeaway * 50 + waitingMinutes * 1.5;
-
-        const transitioned = await this.orderModel
-          .findOneAndUpdate(
-            {
-              _id: order._id,
-              status: 'CREATED',
-              $or: [{ paymentMethod: 'CASH' }, { paymentStatus: 'PAID' }],
-            },
-            { $set: { status: 'CONFIRMED', priorityScore } },
-            { returnDocument: 'after', runValidators: true, session },
-          )
-          .exec();
-        if (!transitioned) {
-          throw new ConflictException(
-            'Đơn hàng đã thay đổi trạng thái hoặc thanh toán; vui lòng tải lại',
-          );
-        }
-
-        await this.outboxService.enqueue(
-          {
-            eventType: 'order.confirmed',
-            queueName: 'order.confirmed',
-            aggregateId: transitioned._id.toString(),
-            payload: {
-              orderId: transitioned._id.toString(),
-              orderNumber: transitioned.orderNumber,
-              priorityScore: transitioned.priorityScore,
-              confirmedAt: transitioned.updatedAt,
-              userRole: transitioned.userRole,
-              isTakeaway: !transitioned.tableId,
-            },
-          },
-          session,
-        );
-
-        return transitioned;
-      }, transactionOptions);
-
-      if (!updatedOrder) {
-        throw new InternalServerErrorException(
-          'Không thể hoàn tất giao dịch xác nhận đơn hàng',
-        );
-      }
-      return updatedOrder;
-    } finally {
-      await session.endSession();
-    }
-  }
-
-  /**
-   * Xác nhận khách đã nhận món và đóng đơn hàng.
-   */
-  async completeOrder(id: string): Promise<Order> {
-    const order = await this.orderModel.findById(id).exec();
-    if (!order) {
-      throw new NotFoundException(`Đơn hàng với ID '${id}' không tồn tại`);
-    }
-
-    if (order.status === 'COMPLETED') {
-      await this.orderSettlementService.reconcileTableForOrder(order._id);
-      return order;
-    }
-
-    if (order.status !== 'READY') {
-      throw new ConflictException(
-        `Đơn hàng ở trạng thái '${order.status}' không thể hoàn thành (chỉ đơn READY mới được hoàn thành)`,
-      );
-    }
-
-    order.status = 'COMPLETED';
-    const updatedOrder = await order.save();
-
-    return updatedOrder;
-  }
-
   /** Admin xác nhận đã thu tiền mặt; đây là thao tác thanh toán duy nhất hiện tại. */
   async confirmCashPayment(
     id: string,
@@ -734,6 +582,9 @@ export class OrderService {
     const rawAdminId = admin._id ?? admin.id;
     if (!rawAdminId || !Types.ObjectId.isValid(rawAdminId)) {
       throw new UnauthorizedException('Thông tin quản trị viên không hợp lệ');
+    }
+    if (admin.role?.toLowerCase() !== 'admin') {
+      throw new ForbiddenException('Chỉ admin được xác nhận thu tiền mặt');
     }
 
     const order = await this.orderModel.findById(id).exec();
@@ -749,20 +600,35 @@ export class OrderService {
       );
     }
     if (order.paymentStatus === 'PAID') {
+      await this.orderSettlementService.reconcileTableForOrder(order._id);
       return order;
     }
 
-    order.paymentStatus = 'PAID';
-    order.status = 'COMPLETED';
-    order.paidAt = new Date();
-    order.paidBy = new Types.ObjectId(rawAdminId);
-    const updatedOrder = await order.save();
+    const updatedOrder = await this.orderModel
+      .findOneAndUpdate(
+        {
+          _id: order._id,
+          status: { $ne: 'CANCELLED' },
+          paymentMethod: 'CASH',
+          paymentStatus: 'PENDING',
+        },
+        {
+          $set: {
+            paymentStatus: 'PAID',
+            status: 'COMPLETED',
+            paidAt: new Date(),
+            paidBy: new Types.ObjectId(rawAdminId),
+          },
+        },
+        { new: true, runValidators: true },
+      )
+      .exec();
+    if (!updatedOrder) {
+      throw new ConflictException(
+        'Đơn hàng đã thay đổi trạng thái hoặc thanh toán; vui lòng tải lại',
+      );
+    }
     await this.orderSettlementService.reconcileTableForOrder(updatedOrder._id);
     return updatedOrder;
   }
 }
-
-const transactionOptions = {
-  readConcern: { level: 'snapshot' as const },
-  writeConcern: { w: 'majority' as const },
-};

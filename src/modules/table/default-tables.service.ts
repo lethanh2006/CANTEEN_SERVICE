@@ -7,7 +7,6 @@ const DEFAULT_TABLES = Array.from({ length: 20 }, (_, index) => {
   const name = `Bàn ${String(index + 1).padStart(2, '0')}`;
   return {
     name,
-    qrCodeUrl: `https://canteen.domain.com/qr/tables/${encodeURIComponent(name)}`,
   };
 });
 
@@ -20,13 +19,12 @@ export class DefaultTablesService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     await this.tableModel.bulkWrite(
-      DEFAULT_TABLES.map(({ name, qrCodeUrl }) => ({
+      DEFAULT_TABLES.map(({ name }) => ({
         updateOne: {
           filter: { name },
           update: {
             $setOnInsert: {
               name,
-              qrCodeUrl,
               capacity: 4,
               status: 'empty',
             },

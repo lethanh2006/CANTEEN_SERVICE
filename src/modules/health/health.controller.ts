@@ -12,7 +12,7 @@ export class HealthController {
     return this.healthService.getLiveness();
   }
 
-  /** MongoDB, Redis và RabbitMQ sẵn sàng; dùng cho readiness probe. */
+  /** MongoDB và Redis sẵn sàng; dùng cho readiness probe. */
   @Get(['', 'ready'])
   getReadiness(): ReadinessHealth {
     return this.healthService.getReadiness();

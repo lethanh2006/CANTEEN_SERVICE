@@ -121,7 +121,6 @@ describe('Tạo đơn hàng nhất quán', () => {
       menuItemModel as never,
       categoryModel as never,
       {} as never,
-      {} as never,
       tableModel as never,
       orderCounterModel as never,
     );
@@ -185,7 +184,7 @@ describe('Tạo đơn hàng nhất quán', () => {
       {
         menuItemId: menuItemId.toString().toUpperCase(),
         quantity: 2,
-        selectedOptions: [{ name: 'Thêm trứng', price: 1 }],
+        selectedOptions: [{ name: 'Thêm trứng' }],
       },
       { menuItemId: menuItemId.toString(), quantity: 1, note: 'Không hành' },
     ];
@@ -312,7 +311,6 @@ describe('Tạo đơn hàng nhất quán', () => {
         harness.menuItemModel as never,
         harness.categoryModel as never,
         {} as never,
-        {} as never,
         harness.tableModel as never,
         counterModel as never,
       );
@@ -392,13 +390,8 @@ describe('Tạo đơn hàng nhất quán', () => {
 
     expect(exists).toHaveBeenCalledWith({
       tableId,
-      $nor: [
-        { status: 'CANCELLED' },
-        {
-          status: { $in: ['COMPLETED', 'PAID'] },
-          paymentStatus: 'PAID',
-        },
-      ],
+      status: { $ne: 'CANCELLED' },
+      paymentStatus: { $ne: 'PAID' },
     });
     expect(tableModel.updateOne).toHaveBeenCalledWith(
       { _id: tableId, status: 'occupied' },

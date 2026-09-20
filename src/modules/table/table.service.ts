@@ -55,28 +55,16 @@ export class TableService extends BaseCrudService<
     return {
       ...dto,
       name,
-      qrCodeUrl: dto.qrCodeUrl?.trim() || this.buildQrCodeUrl(name),
       status: 'empty',
     };
   }
 
-  protected prepareUpdate(
-    dto: UpdateTableDto,
-    current: TableDocument,
-  ): Record<string, unknown> {
+  protected prepareUpdate(dto: UpdateTableDto): Record<string, unknown> {
     const name = dto.name?.trim();
-    const shouldRegenerateQr =
-      name !== undefined &&
-      dto.qrCodeUrl === undefined &&
-      current.qrCodeUrl === this.buildQrCodeUrl(current.name);
 
     return {
       ...dto,
       ...(name !== undefined ? { name } : {}),
-      ...(dto.qrCodeUrl !== undefined
-        ? { qrCodeUrl: dto.qrCodeUrl.trim() }
-        : {}),
-      ...(shouldRegenerateQr ? { qrCodeUrl: this.buildQrCodeUrl(name) } : {}),
     };
   }
 
@@ -86,9 +74,5 @@ export class TableService extends BaseCrudService<
         `Không thể xóa bàn '${table.name}' khi trạng thái là '${table.status}'`,
       );
     }
-  }
-
-  private buildQrCodeUrl(name: string): string {
-    return `https://canteen.domain.com/qr/tables/${encodeURIComponent(name)}`;
   }
 }

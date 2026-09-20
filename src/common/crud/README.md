@@ -2,13 +2,13 @@
 
 Base CRUD cung cấp sẵn các endpoint:
 
-| Method | Path | Chức năng |
-| --- | --- | --- |
-| `GET` | `/resource` | Danh sách, phân trang, tìm kiếm, sắp xếp |
-| `GET` | `/resource/:id` | Chi tiết |
-| `POST` | `/resource` | Tạo mới |
-| `PATCH` | `/resource/:id` | Cập nhật một phần |
-| `DELETE` | `/resource/:id` | Xóa vĩnh viễn |
+| Method   | Path            | Chức năng                                |
+| -------- | --------------- | ---------------------------------------- |
+| `GET`    | `/resource`     | Danh sách, phân trang, tìm kiếm, sắp xếp |
+| `GET`    | `/resource/:id` | Chi tiết                                 |
+| `POST`   | `/resource`     | Tạo mới                                  |
+| `PATCH`  | `/resource/:id` | Cập nhật một phần                        |
+| `DELETE` | `/resource/:id` | Xóa vĩnh viễn                            |
 
 Query chung của endpoint danh sách:
 
@@ -25,4 +25,4 @@ Query chung của endpoint danh sách:
 
 Xem `modules/category` làm ví dụ hoàn chỉnh. Với resource có nghiệp vụ riêng,
 override các hook `prepare*`, `before*`, `after*`; không đưa các thao tác nghiệp vụ
-như FEFO, phát RabbitMQ hoặc undo/redo vào CRUD generic.
+như xác nhận tiền mặt hoặc undo/redo thực đơn vào CRUD generic.

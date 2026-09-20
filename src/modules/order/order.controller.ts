@@ -63,7 +63,7 @@ export class OrderController {
   /**
    * GET /api/canteen/orders/:id
    * Lấy thông tin chi tiết của một đơn hàng
-   * Quyền hạn: Nhân viên hoặc bộ phận bếp.
+   * Quyền hạn: Chủ đơn hoặc quản trị viên.
    */
   @Get(':id')
   @Authenticated()
@@ -76,7 +76,7 @@ export class OrderController {
 
   /**
    * PATCH /api/canteen/orders/:id/cancel
-   * Chủ đơn được hủy khi đơn chưa xác nhận; nhân sự vận hành được hủy trước khi nấu.
+   * Chủ đơn hoặc admin được hủy đơn mới, chưa thanh toán.
    */
   @Patch(':id/cancel')
   @Authenticated()
@@ -86,32 +86,6 @@ export class OrderController {
     @User() user: AuthenticatedUser,
   ) {
     return this.orderService.cancelOrder(id, user, body.reason);
-  }
-
-  /**
-   * PATCH /api/canteen/orders/:id/confirm
-   * Xác nhận đơn hàng, tính điểm ưu tiên và gửi sự kiện chế biến
-   * Quyền hạn: Thu ngân, quản trị viên, quản lý hoặc nhân viên phục vụ.
-   */
-  @Patch(':id/confirm')
-  @Roles(Role.ADMIN)
-  async confirmOrder(
-    @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
-  ) {
-    return this.orderService.confirmOrder(id);
-  }
-
-  /**
-   * PATCH /api/canteen/orders/:id/complete
-   * Xác nhận khách đã nhận món và đóng đơn hàng.
-   * Quyền hạn: Thu ngân, quản trị viên, quản lý hoặc nhân viên phục vụ.
-   */
-  @Patch(':id/complete')
-  @Roles(Role.ADMIN)
-  async completeOrder(
-    @Param('id', new ParseObjectIdPipe('ID đơn hàng')) id: string,
-  ) {
-    return this.orderService.completeOrder(id);
   }
 
   /** PATCH /api/canteen/orders/:id/payment/cash — admin xác nhận đã thu tiền mặt. */

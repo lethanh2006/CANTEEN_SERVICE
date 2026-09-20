@@ -70,12 +70,4 @@ export class MenuHistoryManager {
 
     return command;
   }
-
-  async clear(userId: string): Promise<void> {
-    const undoKey = this.getUndoKey(userId);
-    const redoKey = this.getRedoKey(userId);
-
-    await this.redisService.del(undoKey);
-    await this.redisService.del(redoKey);
-  }
 }

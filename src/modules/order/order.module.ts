@@ -5,7 +5,6 @@ import { MenuItem, MenuItemSchema } from '../../schemas/menu_items.schema';
 import { OrderController } from './order.controller';
 import { OrderService } from './order.service';
 import { Table, TableSchema } from '../../schemas/tables.schema';
-import { PaymentConsumer } from './consumers/payment.consumer';
 import { OrderSettlementService } from './order-settlement.service';
 import {
   OrderCounter,
@@ -24,7 +23,7 @@ import { Category, CategorySchema } from '../../schemas/categories.schema';
     ]),
   ],
   controllers: [OrderController],
-  providers: [OrderService, OrderSettlementService, PaymentConsumer],
+  providers: [OrderService, OrderSettlementService],
   exports: [OrderService],
 })
 export class OrderModule {}

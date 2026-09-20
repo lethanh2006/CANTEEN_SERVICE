@@ -5,12 +5,13 @@ const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const mongoose = require('mongoose');
 const { OrderSchema } = require('../src/schemas/orders.schema');
+const { TableSchema } = require('../src/schemas/tables.schema');
+const { OrderCounterSchema } = require('../src/schemas/order-counter.schema');
 const {
-  InventoryBatchSchema,
-} = require('../src/schemas/inventory_batches.schema');
+  OrderSettlementService,
+} = require('../src/modules/order/order-settlement.service');
 const { MenuItemSchema } = require('../src/schemas/menu_items.schema');
 const { CategorySchema } = require('../src/schemas/categories.schema');
-const { IngredientSchema } = require('../src/schemas/ingredients.schema');
 const { MenuService } = require('../src/modules/menu/menu.service');
 const { OrderService } = require('../src/modules/order/order.service');
 
@@ -59,16 +60,15 @@ async function main() {
     });
     await connection.asPromise();
     const Order = connection.model('Order', OrderSchema);
-    const Batch = connection.model('InventoryBatch', InventoryBatchSchema);
+    const Table = connection.model('Table', TableSchema);
+    const Counter = connection.model('OrderCounter', OrderCounterSchema);
     const MenuItem = connection.model('MenuItem', MenuItemSchema);
     const Category = connection.model('Category', CategorySchema);
-    const Ingredient = connection.model('Ingredient', IngredientSchema);
-    const models = [Order, Batch, MenuItem, Category, Ingredient];
+    const models = [Order, MenuItem, Category, Table, Counter];
     const objectIds = (count) =>
       Array.from({ length: count }, () => new mongoose.Types.ObjectId());
     const users = objectIds(1_000);
     const tables = objectIds(200);
-    const ingredients = objectIds(300);
     const categories = objectIds(40);
     const menuIds = objectIds(800);
     const now = new Date('2030-01-01T00:00:00Z');
@@ -77,9 +77,8 @@ async function main() {
       orderNumber: `#${1001 + i}`,
       userId: users[i % users.length],
       tableId: tables[i % tables.length],
-      status: i % 100 < 2 ? 'CONFIRMED' : i % 100 < 4 ? 'READY' : 'COMPLETED',
+      status: i % 100 < 4 ? 'CREATED' : 'COMPLETED',
       paymentStatus: i % 100 < 4 ? 'PENDING' : 'PAID',
-      priorityScore: i % 7,
       createdAt: new Date(now.getTime() + Math.floor(i / 4) * 60_000),
       items: [
         {
@@ -92,17 +91,7 @@ async function main() {
       totalAmount: 30_000,
       finalAmount: 30_000,
     }));
-    const batches = Array.from({ length: 12_000 }, (_, i) => ({
-      ingredientId: ingredients[i % ingredients.length],
-      status:
-        Math.floor(i / ingredients.length) % 4 === 0 ? 'ACTIVE' : 'DEPLETED',
-      quantity: i % 17 === 0 ? 0 : 10,
-      expiryDate: new Date(
-        now.getTime() + (Math.floor(i / ingredients.length) - 20) * 86_400_000,
-      ),
-    }));
     await Order.collection.insertMany(orders);
-    await Batch.collection.insertMany(batches);
     await Category.collection.insertMany(
       categories.map((_id, i) => ({
         _id,
@@ -121,14 +110,6 @@ async function main() {
         options: [],
       })),
     );
-    await Ingredient.collection.insertMany(
-      ingredients.map((_id, i) => ({
-        _id,
-        name: `Nguyên liệu ${i}`,
-        unit: 'kg',
-        minimumThreshold: 1,
-      })),
-    );
     // Baseline giữ unique giống ứng dụng, chỉ chưa có các index tối ưu mới.
     for (const model of models) {
       for (const [key, options] of model.schema.indexes()) {
@@ -137,10 +118,8 @@ async function main() {
     }
     const unsettled = {
       tableId: tables[42],
-      $nor: [
-        { status: 'CANCELLED' },
-        { status: { $in: ['COMPLETED', 'PAID'] }, paymentStatus: 'PAID' },
-      ],
+      status: { $ne: 'CANCELLED' },
+      paymentStatus: { $ne: 'PAID' },
     };
     const queries = [
       [
@@ -150,7 +129,7 @@ async function main() {
       [
         'orders/status',
         () =>
-          Order.find({ status: 'READY' })
+          Order.find({ status: 'CREATED' })
             .sort({ createdAt: -1, _id: -1 })
             .limit(20),
       ],
@@ -160,59 +139,6 @@ async function main() {
           Order.find({ userId: users[42] }).sort({ createdAt: -1, _id: -1 }),
       ],
       ['orders/table', () => Order.find(unsettled).select({ _id: 1 }).limit(1)],
-      [
-        'kitchen/queue',
-        () =>
-          Order.find({ status: 'CONFIRMED' }).sort({
-            priorityScore: -1,
-            createdAt: 1,
-          }),
-      ],
-      [
-        'kitchen/next',
-        () =>
-          Order.find({ status: 'CONFIRMED' })
-            .sort({ priorityScore: -1, createdAt: 1 })
-            .limit(1),
-      ],
-      [
-        'inventory/fefo',
-        () =>
-          Batch.find(
-            {
-              ingredientId: ingredients[42],
-              status: 'ACTIVE',
-              quantity: { $gt: 0 },
-              expiryDate: { $gt: now },
-            },
-            { expiryDate: 1, quantity: 1 },
-          ).sort({ expiryDate: 1, _id: 1 }),
-      ],
-      [
-        'inventory/expiry',
-        () =>
-          Batch.find({
-            status: 'ACTIVE',
-            quantity: { $gt: 0 },
-            expiryDate: { $gt: now },
-          }).sort({ expiryDate: 1 }),
-      ],
-      [
-        'inventory/expired',
-        () =>
-          Batch.find({
-            ingredientId: ingredients[42],
-            status: 'ACTIVE',
-            expiryDate: { $lte: now },
-          }),
-      ],
-      [
-        'inventory/ingredient',
-        () =>
-          Batch.find({ ingredientId: ingredients[42] })
-            .select({ _id: 1 })
-            .limit(1),
-      ],
       [
         'menu/category',
         () => MenuItem.find({ categoryId: categories[0], isAvailable: true }),
@@ -253,10 +179,9 @@ async function main() {
       Order,
       MenuItem,
       Category,
-      {},
-      {},
-      {},
-      {},
+      new OrderSettlementService(Order, Table),
+      Table,
+      Counter,
     );
     const firstPage = await orderService.listOrders({ page: 1, limit: 20 });
     const secondPage = await orderService.listOrders({ page: 2, limit: 20 });
@@ -297,38 +222,53 @@ async function main() {
     );
     assert.equal((await menuService.searchMenuItems('.*')).length, 0);
 
-    // Unique sparse vẫn cho phép thiếu mã nhưng chặn một mã gắn vào hai đơn.
-    for (const field of [
-      'paymentId',
-      'paymentEventId',
-      'providerTransactionId',
-    ]) {
-      await Order.collection.updateOne(
-        { _id: orders[0]._id },
-        { $set: { [field]: `test-${field}` } },
-      );
-      await assert.rejects(
-        Order.collection.updateOne(
-          { _id: orders[1]._id },
-          { $set: { [field]: `test-${field}` } },
-        ),
-        (error) => error.code === 11000,
-      );
-    }
-    const next = await Order.findOneAndUpdate(
-      { status: 'CONFIRMED' },
-      { $set: { status: 'COOKING' } },
-      { sort: { priorityScore: -1, createdAt: 1 }, returnDocument: 'after' },
+    // Kiểm tra luồng tiền mặt với MongoDB thật trên dữ liệu riêng của script.
+    const table = await Table.create({ name: 'Bàn kiểm thử', capacity: 4 });
+    const user = { _id: users[0].toString(), role: 'user' };
+    const admin = { _id: users[1].toString(), role: 'admin' };
+    const payload = {
+      tableId: table._id.toString(),
+      paymentMethod: 'CASH',
+      items: [{ menuItemId: menuIds[3].toString(), quantity: 2 }],
+    };
+    const firstOrder = await orderService.createOrder(payload, user);
+    const secondOrder = await orderService.createOrder(payload, user);
+    assert.equal(firstOrder.finalAmount, 60_000);
+    assert.notEqual(firstOrder.orderNumber, secondOrder.orderNumber);
+    assert.equal((await Table.findById(table._id)).status, 'occupied');
+    const paid = await orderService.confirmCashPayment(
+      firstOrder._id.toString(),
+      admin,
     );
-    assert.ok(next);
-    assert.equal(next.status, 'COOKING');
-    assert.equal(
-      await Order.countDocuments({ status: 'CONFIRMED', _id: next._id }),
-      0,
+    assert.equal(paid.status, 'COMPLETED');
+    assert.equal(paid.paymentStatus, 'PAID');
+    assert.equal(paid.paidBy.toString(), admin._id);
+    assert.equal((await Table.findById(table._id)).status, 'occupied');
+    await orderService.cancelOrder(secondOrder._id.toString(), user, 'Đổi món');
+    assert.equal((await Table.findById(table._id)).status, 'empty');
+    const repeated = await orderService.confirmCashPayment(
+      firstOrder._id.toString(),
+      admin,
     );
+    assert.equal(repeated.paidAt.getTime(), paid.paidAt.getTime());
+
+    const racing = await orderService.createOrder(payload, user);
+    await Promise.allSettled([
+      orderService.confirmCashPayment(racing._id.toString(), admin),
+      orderService.cancelOrder(racing._id.toString(), user),
+    ]);
+    const finalOrder = await Order.findById(racing._id);
+    assert.ok(
+      (finalOrder.status === 'COMPLETED' &&
+        finalOrder.paymentStatus === 'PAID') ||
+        (finalOrder.status === 'CANCELLED' &&
+          finalOrder.paymentStatus === 'PENDING'),
+      'Thu tiền và hủy đồng thời phải giữ trạng thái nhất quán',
+    );
+    assert.equal((await Table.findById(table._id)).status, 'empty');
     console.table(report);
     console.log(
-      'Đạt: query plans, phân trang, menu công khai, unique thanh toán và chuyển trạng thái bếp.',
+      'Đạt: query plans, phân trang, menu, tạo đơn, thu tiền và hủy đồng thời.',
     );
   } finally {
     try {

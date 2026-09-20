@@ -2,13 +2,11 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { ConnectionStates } from 'mongoose';
 import type { Connection } from 'mongoose';
-import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { RedisService } from '../redis/redis.service';
 
 export interface DependencyHealth {
   mongodb: 'up' | 'down';
   redis: 'up' | 'down';
-  rabbitmq: 'up' | 'down';
 }
 
 export interface LivenessHealth {
@@ -29,7 +27,6 @@ export class HealthService {
   constructor(
     @InjectConnection() private readonly mongoConnection: Connection,
     private readonly redisService: RedisService,
-    private readonly rabbitMQService: RabbitMQService,
   ) {}
 
   getLiveness(): LivenessHealth {
@@ -47,7 +44,6 @@ export class HealthService {
           ? 'up'
           : 'down',
       redis: this.redisService.isReady() ? 'up' : 'down',
-      rabbitmq: this.rabbitMQService.isReady() ? 'up' : 'down',
     };
     const isReady = Object.values(dependencies).every(
       (status) => status === 'up',

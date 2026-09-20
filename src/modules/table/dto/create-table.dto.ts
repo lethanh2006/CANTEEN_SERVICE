@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsNotEmpty,
-  IsNumber,
-  Min,
-  IsOptional,
-} from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, Min } from 'class-validator';
 
 export class CreateTableDto {
   @IsString()
@@ -14,8 +8,4 @@ export class CreateTableDto {
   @IsNumber()
   @Min(1)
   capacity!: number;
-
-  @IsString()
-  @IsOptional()
-  qrCodeUrl?: string;
 }

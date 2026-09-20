@@ -69,16 +69,15 @@ export class Order {
   @Prop({ type: mongoose.Schema.Types.ObjectId, required: true })
   userId!: Types.ObjectId;
 
-  @Prop({ required: true, default: 'user' }) // 'user' | 'manager' | 'vip'
+  @Prop({ required: true, default: 'user' })
   userRole!: string;
 
   @Prop({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Table',
-    required: false,
-    default: null,
+    required: true,
   })
-  tableId!: Types.ObjectId | null;
+  tableId!: Types.ObjectId;
 
   @Prop({ type: [OrderItemSchema], required: true })
   items!: OrderItem[];
@@ -93,15 +92,6 @@ export class Order {
 
   @Prop({
     required: true,
-    default: 0,
-    min: 0,
-    max: Number.MAX_SAFE_INTEGER,
-    validate: Number.isSafeInteger,
-  })
-  discountAmount!: number;
-
-  @Prop({
-    required: true,
     min: 0,
     max: Number.MAX_SAFE_INTEGER,
     validate: Number.isSafeInteger,
@@ -110,44 +100,24 @@ export class Order {
 
   @Prop({
     required: true,
-    enum: [
-      'CREATED',
-      'CONFIRMED',
-      'COOKING',
-      'READY',
-      'COMPLETED',
-      'PAID',
-      'CANCELLED',
-    ],
+    enum: ['CREATED', 'COMPLETED', 'CANCELLED'],
     default: 'CREATED',
   })
   status!: string;
 
-  @Prop({ required: true, default: 0 })
-  priorityScore!: number;
-
   @Prop({
     required: true,
-    enum: ['PENDING', 'PAID', 'REFUNDED'],
+    enum: ['PENDING', 'PAID'],
     default: 'PENDING',
   })
   paymentStatus!: string;
 
   @Prop({
     required: true,
-    enum: ['CASH', 'VNPAY', 'MOMO', 'VIETQR'],
+    enum: ['CASH'],
     default: 'CASH',
   })
   paymentMethod!: string;
-
-  @Prop({ required: false, unique: true, sparse: true })
-  paymentId?: string;
-
-  @Prop({ required: false, unique: true, sparse: true })
-  paymentEventId?: string;
-
-  @Prop({ required: false, unique: true, sparse: true })
-  providerTransactionId?: string;
 
   @Prop({ required: false })
   paidAt?: Date;
@@ -177,8 +147,3 @@ OrderSchema.index({ status: 1, createdAt: -1, _id: -1 });
 OrderSchema.index({ userId: 1, createdAt: -1, _id: -1 });
 // Đối soát và hoàn tác trạng thái bàn chỉ cần xét các đơn cùng bàn.
 OrderSchema.index({ tableId: 1 });
-// Hàng đợi bếp chỉ đọc/nhận đơn CONFIRMED, không cần index cả lịch sử.
-OrderSchema.index(
-  { priorityScore: -1, createdAt: 1 },
-  { partialFilterExpression: { status: 'CONFIRMED' } },
-);

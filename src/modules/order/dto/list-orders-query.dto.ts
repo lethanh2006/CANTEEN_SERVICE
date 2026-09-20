@@ -9,17 +9,9 @@ import {
   Min,
 } from 'class-validator';
 
-export const ORDER_STATUSES = [
-  'CREATED',
-  'CONFIRMED',
-  'COOKING',
-  'READY',
-  'COMPLETED',
-  'PAID',
-  'CANCELLED',
-] as const;
+export const ORDER_STATUSES = ['CREATED', 'COMPLETED', 'CANCELLED'] as const;
 
-export const ORDER_PAYMENT_STATUSES = ['PENDING', 'PAID', 'REFUNDED'] as const;
+export const ORDER_PAYMENT_STATUSES = ['PENDING', 'PAID'] as const;
 
 export class ListOrdersQueryDto {
   @IsOptional()

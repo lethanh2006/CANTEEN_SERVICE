@@ -7,7 +7,7 @@ import { Table, TableDocument } from '../../schemas/tables.schema';
 /**
  * Đối soát trạng thái bàn từ dữ liệu Order mới nhất trong MongoDB.
  *
- * Cả luồng hoàn tất, hủy đơn lẫn consumer thanh toán đều gọi hàm này. Bàn chỉ
+ * Cả luồng thu tiền mặt và hủy đơn đều gọi hàm này. Bàn chỉ
  * được giải phóng khi không còn đơn chưa tất toán nào cùng bàn.
  */
 @Injectable()
@@ -34,13 +34,8 @@ export class OrderSettlementService {
     const unsettledOrder = await this.orderModel
       .exists({
         tableId: order.tableId,
-        $nor: [
-          { status: 'CANCELLED' },
-          {
-            status: { $in: ['COMPLETED', 'PAID'] },
-            paymentStatus: 'PAID',
-          },
-        ],
+        status: { $ne: 'CANCELLED' },
+        paymentStatus: { $ne: 'PAID' },
       })
       .exec();
     if (unsettledOrder) return;

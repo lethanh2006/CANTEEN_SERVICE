@@ -31,7 +31,7 @@ export class TableController extends TableCrudController {
   /**
    * PATCH /api/canteen/tables/:id/status
    * Cập nhật trạng thái bàn ăn
-   * Quyền hạn: Quản trị viên, quản lý hoặc nhân viên phục vụ.
+   * Quyền hạn: Quản trị viên.
    */
   @Patch(':id/status')
   @Roles(Role.ADMIN)

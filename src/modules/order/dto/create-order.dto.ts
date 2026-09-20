@@ -1,5 +1,6 @@
 import {
   IsArray,
+  ArrayMinSize,
   IsEnum,
   IsInt,
   IsMongoId,
@@ -16,14 +17,6 @@ export class OrderSelectedOptionDto {
   @IsNotEmpty({ message: 'Tên tùy chọn không được để trống' })
   @IsString({ message: 'Tên tùy chọn phải là chuỗi ký tự' })
   name!: string;
-
-  @IsOptional()
-  @IsInt({ message: 'Giá tùy chọn phải là số nguyên VND' })
-  @Min(0, { message: 'Giá tùy chọn phải lớn hơn hoặc bằng 0' })
-  @Max(Number.MAX_SAFE_INTEGER, {
-    message: 'Giá tùy chọn vượt giới hạn hỗ trợ',
-  })
-  price?: number;
 }
 
 export class CreateOrderItemDto {
@@ -54,6 +47,7 @@ export class CreateOrderDto {
 
   @IsNotEmpty({ message: 'Danh sách món ăn (items) không được để trống' })
   @IsArray({ message: 'Danh sách món ăn phải là mảng' })
+  @ArrayMinSize(1, { message: 'Đơn hàng phải có ít nhất một món ăn' })
   @ValidateNested({ each: true })
   @Type(() => CreateOrderItemDto)
   items!: CreateOrderItemDto[];
