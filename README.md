@@ -103,6 +103,8 @@ npm run check:indexes
 `check:indexes` starts a temporary MongoDB container and validates the indexes and
 important order/table concurrency paths.
 
+More detailed contract notes are available in [the request lifecycle guide](docs/request-lifecycle.md) and [the database index guide](docs/database-indexes.md).
+
 ## CI/CD
 
 `.github/workflows/ci.yml` calls the pinned reusable Node.js workflow from
