@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
-export class CrudQueryDto {
+export class ListCategoriesQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt({ message: 'page phải là số nguyên' })
