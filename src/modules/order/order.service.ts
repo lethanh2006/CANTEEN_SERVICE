@@ -14,7 +14,7 @@ import { Order, OrderDocument, OrderItem } from '../../schemas/orders.schema';
 import { MenuItem, MenuItemDocument } from '../../schemas/menu_items.schema';
 import { Category, CategoryDocument } from '../../schemas/categories.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
+import { AuthenticatedUser } from '../../common/auth';
 import { OrderSettlementService } from './order-settlement.service';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { Table, TableDocument } from '../../schemas/tables.schema';
@@ -23,7 +23,7 @@ import {
   OrderCounter,
   OrderCounterDocument,
 } from '../../schemas/order-counter.schema';
-import { toError } from '../../common/utils/error.util';
+import { toError } from '../../common/error.util';
 
 type OrderTableClaim = {
   tableId: Types.ObjectId;

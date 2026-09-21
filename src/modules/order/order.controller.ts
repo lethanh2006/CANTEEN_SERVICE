@@ -10,13 +10,15 @@ import {
 } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { User } from '../../common/decorators/user.decorator';
-import { Role } from '../../common/enums/role.enum';
-import { ParseObjectIdPipe } from '../../common/pipes/parse-object-id.pipe';
-import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
-import { Authenticated } from '../../common/decorators/authenticated.decorator';
+import {
+  Authenticated,
+  type AuthenticatedUser,
+  Role,
+  Roles,
+  User,
+} from '../../common/auth';
+import { ParseObjectIdPipe } from '../../common/parse-object-id.pipe';
+import { RolesGuard } from '../../common/roles.guard';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { CancelOrderDto } from './dto/cancel-order.dto';
 

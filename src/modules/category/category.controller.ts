@@ -9,10 +9,9 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { Role } from '../../common/enums/role.enum';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { ParseObjectIdPipe } from '../../common/pipes/parse-object-id.pipe';
+import { Role, Roles } from '../../common/auth';
+import { ParseObjectIdPipe } from '../../common/parse-object-id.pipe';
+import { RolesGuard } from '../../common/roles.guard';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { ListCategoriesQueryDto } from './dto/list-categories-query.dto';

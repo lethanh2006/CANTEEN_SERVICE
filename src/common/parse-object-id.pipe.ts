@@ -1,9 +1,7 @@
 import { BadRequestException, Injectable, PipeTransform } from '@nestjs/common';
 import { Types } from 'mongoose';
 
-/**
- * Kiểm tra tham số đường dẫn có đúng định dạng MongoDB ObjectId hay không.
- */
+/** Kiểm tra tham số đường dẫn có đúng định dạng MongoDB ObjectId hay không. */
 @Injectable()
 export class ParseObjectIdPipe implements PipeTransform<string, string> {
   constructor(private readonly fieldName = 'ID tài nguyên') {}

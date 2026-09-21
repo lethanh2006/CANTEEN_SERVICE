@@ -1,19 +1,19 @@
 import {
-  Injectable,
   CanActivate,
   ExecutionContext,
-  UnauthorizedException,
   ForbiddenException,
+  Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ROLES_KEY } from '../decorators/roles.decorator';
 import {
+  AUTHENTICATED_KEY,
   AuthenticatedUser,
   parseAuthenticatedUser,
   RequestWithAuthenticatedUser,
-} from '../interfaces/authenticated-user.interface';
-import { GatewaySignatureService } from '../security/gateway-signature.service';
-import { AUTHENTICATED_KEY } from '../decorators/authenticated.decorator';
+  ROLES_KEY,
+} from './auth';
+import { GatewaySignatureService } from './gateway-signature.service';
 
 @Injectable()
 export class RolesGuard implements CanActivate {

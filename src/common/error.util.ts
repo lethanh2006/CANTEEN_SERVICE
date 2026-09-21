@@ -1,6 +1,4 @@
-/**
- * Chuẩn hóa giá trị được bắt trong catch thành đối tượng Error.
- */
+/** Chuẩn hóa giá trị được bắt trong catch thành đối tượng Error. */
 export function toError(value: unknown): Error {
   if (value instanceof Error) {
     return value;

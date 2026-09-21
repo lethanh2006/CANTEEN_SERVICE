@@ -12,12 +12,9 @@ import {
 import { MenuService } from './menu.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { User } from '../../common/decorators/user.decorator';
-import { Role } from '../../common/enums/role.enum';
-import { ParseObjectIdPipe } from '../../common/pipes/parse-object-id.pipe';
-import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
+import { type AuthenticatedUser, Role, Roles, User } from '../../common/auth';
+import { ParseObjectIdPipe } from '../../common/parse-object-id.pipe';
+import { RolesGuard } from '../../common/roles.guard';
 
 @Controller('api/canteen')
 @UseGuards(RolesGuard)
