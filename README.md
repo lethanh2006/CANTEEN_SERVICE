@@ -1,70 +1,69 @@
-# NRApp Canteen Service
+# Dịch vụ căn tin NRApp
 
-The NRApp Canteen Service is a NestJS service for employee table ordering. It
-owns the menu, categories, tables, and order lifecycle; clients access it
-through the API Gateway.
+Dịch vụ căn tin NRApp là service NestJS phục vụ gọi món tại bàn cho nhân viên.
+Service sở hữu thực đơn, danh mục, bàn và vòng đời đơn hàng; client truy cập
+thông qua API Gateway.
 
-## Current scope
+## Phạm vi hiện tại
 
-- Public menu and category browsing, including menu search.
-- Admin management of menu items, categories, and tables.
-- Employee orders tied to a table, with server-side price and option resolution.
-- Cash settlement by an administrator and cancellation of eligible orders.
-- Menu undo/redo history backed by Redis.
-- Automatic creation of 20 default tables on first startup without overwriting
-  existing table data.
+- Xem thực đơn và danh mục công khai, có tìm kiếm món.
+- Admin quản lý món ăn, danh mục và bàn.
+- Nhân viên tạo đơn theo bàn; giá món và tùy chọn được xử lý phía server.
+- Admin thu tiền mặt và hủy các đơn đủ điều kiện.
+- Lịch sử undo/redo thực đơn được lưu qua Redis.
+- Tự tạo 20 bàn mặc định ở lần khởi động đầu tiên nhưng không ghi đè dữ liệu
+  bàn đã tồn tại.
 
-The service currently supports `CASH` orders only. It does not contain kitchen,
-warehouse, ingredient, automatic table assignment, discount/subsidy, QR payment,
-RabbitMQ, or outbox modules.
+Service hiện chỉ hỗ trợ đơn `CASH`. Service không còn module bếp, kho, nguyên
+liệu, phân bàn tự động, giảm giá/trợ cấp, thanh toán QR, RabbitMQ hoặc outbox.
 
-## Order rules
+## Quy tắc đơn hàng
 
-The server reads item prices and option prices from MongoDB; the client sends item
-IDs, quantities, and selected option names. New orders use:
+Server đọc giá món và giá tùy chọn từ MongoDB; client chỉ gửi ID món, số lượng và
+tên tùy chọn được chọn. Đơn mới sử dụng:
 
-- `status`: `CREATED`, `COMPLETED`, or `CANCELLED`
-- `paymentStatus`: `PENDING` or `PAID`
+- `status`: `CREATED`, `COMPLETED` hoặc `CANCELLED`
+- `paymentStatus`: `PENDING` hoặc `PAID`
 - `paymentMethod`: `CASH`
 
-A table remains occupied while it has an unsettled order. It is released only
-when no non-cancelled order on that table remains unpaid.
+Bàn vẫn ở trạng thái đang sử dụng khi còn đơn chưa tất toán. Bàn chỉ được trả về
+trạng thái trống khi không còn đơn chưa hủy nào chưa thanh toán trên bàn đó.
 
 ## HTTP API
 
-All routes are under `/api/canteen` and are exposed through the Gateway.
+Tất cả route nằm dưới `/api/canteen` và được expose qua Gateway.
 
-| Routes | Access | Purpose |
+| Route | Quyền | Mục đích |
 | --- | --- | --- |
-| `GET /menu`, `GET /menu/search` | Public | Browse and search available menu items |
-| `GET /categories`, `GET /categories/:id` | Public | Browse active categories |
-| `GET /admin/menu` | Admin | Read the complete menu, including hidden records |
-| `POST/PUT/DELETE /admin/menu...` | Admin | Manage menu items |
-| `POST /admin/menu/undo`, `POST /admin/menu/redo` | Admin | Undo or redo menu changes |
-| `POST /orders` | Authenticated | Create a cash order |
-| `GET /orders/my-orders` | Authenticated | Read the current user's orders |
-| `GET /orders/:id` | Authenticated | Read an order allowed for the current user |
-| `PATCH /orders/:id/cancel` | Owner or admin | Cancel an eligible order |
-| `GET /orders` | Admin | Filter and paginate operational orders |
-| `PATCH /orders/:id/payment/cash` | Admin | Mark an order as paid and completed |
-| `GET /tables` and `GET /tables/:id` | Authenticated | Read table status |
-| `POST/PATCH/DELETE /tables...` | Admin | Create, update, delete, and change table status |
-| `POST/PATCH/DELETE /categories...` | Admin | Manage categories |
+| `GET /menu`, `GET /menu/search` | Công khai | Xem và tìm kiếm món đang bán |
+| `GET /categories`, `GET /categories/:id` | Công khai | Xem danh mục đang hoạt động |
+| `GET /admin/menu` | Admin | Đọc toàn bộ thực đơn, bao gồm bản ghi bị ẩn |
+| `POST/PUT/DELETE /admin/menu...` | Admin | Quản lý món ăn |
+| `POST /admin/menu/undo`, `POST /admin/menu/redo` | Admin | Undo hoặc redo thay đổi thực đơn |
+| `POST /orders` | Đã xác thực | Tạo đơn tiền mặt |
+| `GET /orders/my-orders` | Đã xác thực | Xem đơn của người dùng hiện tại |
+| `GET /orders/:id` | Đã xác thực | Xem đơn mà người dùng hiện tại được phép xem |
+| `PATCH /orders/:id/cancel` | Chủ đơn hoặc admin | Hủy đơn đủ điều kiện |
+| `GET /orders` | Admin | Lọc và phân trang danh sách đơn vận hành |
+| `PATCH /orders/:id/payment/cash` | Admin | Xác nhận đã thu tiền và hoàn tất đơn |
+| `GET /tables` và `GET /tables/:id` | Đã xác thực | Xem trạng thái bàn |
+| `POST/PATCH/DELETE /tables...` | Admin | Tạo, sửa, xóa và đổi trạng thái bàn |
+| `POST/PATCH/DELETE /categories...` | Admin | Quản lý danh mục |
 
-`GET /health/live` (also `/health`) reports process liveness. The readiness
-endpoint reports MongoDB and Redis status and returns an unavailable response
-when either dependency is down.
+`GET /health/live` (và `/health`) báo liveness của process. Endpoint readiness
+báo trạng thái MongoDB và Redis, đồng thời trả response unavailable khi một
+trong hai dependency bị lỗi.
 
-## Gateway trust and security
+## Tin cậy Gateway và bảo mật
 
-The Gateway forwards the authenticated user as a signed payload. In production,
-`CANTEEN_INTERNAL_SECRET` is required and must match the Gateway secret; the
-service rejects missing, expired, or invalid signatures. Local development can
-leave `CANTEEN_REQUIRE_SIGNATURE=false` while testing direct requests.
+Gateway chuyển identity người dùng dưới dạng payload có chữ ký. Ở production,
+`CANTEEN_INTERNAL_SECRET` là bắt buộc và phải giống secret tại Gateway; service
+từ chối chữ ký thiếu, hết hạn hoặc không hợp lệ. Khi phát triển local có thể để
+`CANTEEN_REQUIRE_SIGNATURE=false` để gọi trực tiếp phục vụ kiểm thử.
 
-## Configuration
+## Cấu hình
 
-Copy `.env.example` to `.env`:
+Sao chép `.env.example` thành `.env`:
 
 ```env
 PORT=5005
@@ -75,13 +74,13 @@ CANTEEN_REQUIRE_SIGNATURE=false
 CANTEEN_SIGNATURE_MAX_AGE_MS=300000
 ```
 
-`LOG_LEVEL`, `LOG_FORMAT`, and `DEPLOYMENT_ENVIRONMENT` configure application
-logging. Do not commit a real `.env` file.
+`LOG_LEVEL`, `LOG_FORMAT` và `DEPLOYMENT_ENVIRONMENT` cấu hình application log.
+Không commit file `.env` thật.
 
-## Local development
+## Chạy local
 
-The service uses the local Logger observability package. Keep Logger beside this
-repository in the backend directory, then run:
+Service dùng package observability cục bộ của Logger. Đặt Logger cạnh repository
+này trong thư mục backend, sau đó chạy:
 
 ```bash
 npm ci --prefix ../logger/packages/observability --no-audit --no-fund
@@ -90,7 +89,7 @@ cp .env.example .env
 npm run start:dev
 ```
 
-Quality and data-contract checks:
+Các lệnh kiểm tra chất lượng và hợp đồng dữ liệu:
 
 ```bash
 npm run lint
@@ -100,14 +99,16 @@ npm run build
 npm run check:indexes
 ```
 
-`check:indexes` starts a temporary MongoDB container and validates the indexes and
-important order/table concurrency paths.
+`check:indexes` khởi động MongoDB tạm thời bằng Docker và kiểm tra index cùng các
+luồng quan trọng về tính nhất quán đơn hàng/trạng thái bàn.
 
-More detailed contract notes are available in [the request lifecycle guide](docs/request-lifecycle.md) and [the database index guide](docs/database-indexes.md).
+Tài liệu chi tiết hơn nằm trong [hướng dẫn vòng đời request](docs/request-lifecycle.md)
+và [hướng dẫn index database](docs/database-indexes.md).
 
 ## CI/CD
 
-`.github/workflows/ci.yml` calls the pinned reusable Node.js workflow from
-[Logger](https://github.com/lethanh2006/Logger). A successful push to the default
-branch triggers `.github/workflows/cd.yml` and deploys the exact commit through
-the pinned VPS workflow. See [.github/CI.md](.github/CI.md) for the release details.
+`.github/workflows/ci.yml` gọi reusable workflow kiểm tra Node.js đã pin từ
+[Logger](https://github.com/lethanh2006/Logger). Push thành công vào nhánh mặc
+định sẽ kích hoạt `.github/workflows/cd.yml` và deploy đúng commit thông qua
+reusable VPS workflow đã pin. Xem [.github/CI.md](.github/CI.md) để biết chi tiết
+phát hành.
