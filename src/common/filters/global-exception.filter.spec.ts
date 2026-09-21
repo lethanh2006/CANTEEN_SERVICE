@@ -2,7 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
 import type { HttpAdapterHost } from '@nestjs/core';
 import { GlobalExceptionFilter } from './global-exception.filter';
-import { appLogger } from './observability';
+import { appLogger } from '../logging/logger';
 
 describe('GlobalExceptionFilter canteen observability', () => {
   const reply = jest.fn(

@@ -8,13 +8,13 @@ import {
 import { HttpAdapterHost } from '@nestjs/core';
 import {
   classifyException,
-  logAndRecordException,
+  logException,
   normalizeRouteTemplate,
 } from '@nrapp/observability';
 import type { Request, Response } from 'express';
 import type { ValidationError } from 'class-validator';
-import { appLogger } from './observability';
-import type { RequestContext } from './request-context';
+import { appLogger } from '../logging/logger';
+import type { RequestContext } from '../interfaces/request-context.interface';
 
 interface HttpRequestContext extends Request {
   requestContext?: RequestContext;
@@ -33,7 +33,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     let errorId: string | undefined;
     if (!classification.expected) {
-      const result = logAndRecordException(
+      const result = logException(
         appLogger,
         'http.request.failed',
         exception,

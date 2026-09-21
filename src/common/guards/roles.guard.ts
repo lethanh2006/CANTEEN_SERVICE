@@ -6,14 +6,14 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import {
-  AUTHENTICATED_KEY,
+import { AUTHENTICATED_KEY } from '../decorators/authenticated.decorator';
+import { ROLES_KEY } from '../decorators/roles.decorator';
+import type {
   AuthenticatedUser,
-  parseAuthenticatedUser,
   RequestWithAuthenticatedUser,
-  ROLES_KEY,
-} from './auth';
-import { GatewaySignatureService } from './gateway-signature.service';
+} from '../interfaces/authenticated-user.interface';
+import { GatewaySignatureService } from '../security/gateway-signature.service';
+import { parseAuthenticatedUser } from '../utils/authenticated-user.util';
 
 @Injectable()
 export class RolesGuard implements CanActivate {

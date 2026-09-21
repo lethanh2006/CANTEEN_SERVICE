@@ -1,16 +1,12 @@
-import '@nrapp/observability/register';
 import dns from 'dns';
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import {
-  flushLoggerAndShutdownTelemetry,
-  logAndRecordException,
-} from '@nrapp/observability';
+import { flushLogger, logException } from '@nrapp/observability';
 import { AppModule } from './app.module';
-import { createValidationException } from './common/global-exception.filter';
-import { appLogger, nestLogger } from './common/observability';
+import { createValidationException } from './common/filters/global-exception.filter';
+import { appLogger, nestLogger } from './common/logging/logger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { logger: nestLogger });
@@ -26,7 +22,7 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3000);
 }
 void bootstrap().catch(async (error: unknown) => {
-  logAndRecordException(
+  logException(
     appLogger,
     'process.bootstrap.failed',
     error,
@@ -42,6 +38,6 @@ void bootstrap().catch(async (error: unknown) => {
       },
     },
   );
-  await flushLoggerAndShutdownTelemetry(appLogger, 3_000);
+  await flushLogger(appLogger);
   process.exitCode = 1;
 });
